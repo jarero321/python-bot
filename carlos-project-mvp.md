@@ -170,282 +170,291 @@ carlos-command/
 
 ### Fase 0: Setup Inicial (Día 1-2)
 
-#### 0.1 Infraestructura Base
-- [ ] Crear repositorio Git
-- [ ] Crear estructura de carpetas
-- [ ] Configurar `.gitignore`
-- [ ] Crear `requirements.txt` con dependencias
-- [ ] Crear `pyproject.toml` para configuración del proyecto
-- [ ] Crear `.env.example` con todas las variables necesarias
+#### 0.1 Infraestructura Base ✅ COMPLETADA
+- [x] Crear repositorio Git
+- [x] Crear estructura de carpetas
+- [x] Configurar `.gitignore`
+- [x] Crear `requirements.txt` con dependencias
+- [x] Crear `pyproject.toml` para configuración del proyecto
+- [x] Crear `.env.example` con todas las variables necesarias
 
-#### 0.2 Docker Setup
-- [ ] Crear `Dockerfile` para la aplicación
-- [ ] Crear `docker-compose.yml` con servicios
-- [ ] Configurar volúmenes para SQLite y logs
-- [ ] Configurar health checks
-- [ ] Test: `docker-compose up` funciona
+#### 0.2 Docker Setup ✅ COMPLETADA
+- [x] Crear `Dockerfile` para la aplicación
+- [x] Crear `docker-compose.yml` con servicios (app + ngrok)
+- [x] Configurar volúmenes para SQLite y logs
+- [x] Configurar health checks
+- [x] Test: `docker-compose up` funciona
 
-#### 0.3 FastAPI Base
-- [ ] Crear `app/main.py` con FastAPI app
-- [ ] Configurar CORS
-- [ ] Configurar logging
-- [ ] Crear endpoint `/health`
-- [ ] Crear `app/config.py` con Pydantic Settings
-- [ ] Test: API responde en localhost
+#### 0.3 FastAPI Base ✅ COMPLETADA
+- [x] Crear `app/main.py` con FastAPI app
+- [x] Configurar CORS
+- [x] Configurar logging
+- [x] Crear endpoint `/health`
+- [x] Crear `app/config.py` con Pydantic Settings
+- [x] Test: API responde en localhost
 
-#### 0.4 Telegram Bot Setup
-- [ ] Crear bot en BotFather
-- [ ] Obtener token
-- [ ] Crear `app/services/telegram.py`
-- [ ] Crear `app/api/telegram_webhook.py`
-- [ ] Configurar webhook URL
-- [ ] Test: Bot responde a `/start`
+#### 0.4 Telegram Bot Setup ✅ COMPLETADA
+- [x] Crear bot en BotFather
+- [x] Obtener token
+- [x] Crear `app/services/telegram.py`
+- [x] Crear `app/api/telegram_webhook.py`
+- [x] Configurar webhook URL (ngrok)
+- [x] Test: Bot responde a `/start`
 
-#### 0.5 Notion Connection
-- [ ] Verificar API key existente
-- [ ] Crear `app/services/notion.py` con SDK
-- [ ] Implementar funciones CRUD básicas
-- [ ] Mapear IDs de databases
-- [ ] Test: Leer/escribir en Notion funciona
+#### 0.5 Notion Connection ✅ COMPLETADA
+- [x] Verificar API key existente
+- [x] Crear `app/services/notion.py` con SDK
+- [x] Implementar funciones CRUD básicas
+- [x] Mapear IDs de databases
+- [x] Test: Leer/escribir en Notion funciona
 
-#### 0.6 SQLite Setup
-- [ ] Crear `app/db/database.py`
-- [ ] Crear `app/db/models.py` con tablas:
+#### 0.6 SQLite Setup ✅ COMPLETADA
+- [x] Crear `app/db/database.py`
+- [x] Crear `app/db/models.py` con tablas:
   - `conversation_state`
   - `scheduled_reminders`
   - `agent_metrics`
   - `user_preferences`
-- [ ] Implementar migrations básicas
-- [ ] Test: CRUD en SQLite funciona
+  - `daily_logs`
+- [x] Implementar repositories (conversation_state, reminders, metrics)
+- [x] Test: CRUD en SQLite funciona
 
 ---
 
-### Fase 1: Core Bot (Día 3-5)
+### Fase 1: Core Bot (Día 3-5) ✅ COMPLETADA
 
-#### 1.1 Handlers Básicos
-- [ ] Implementar `/start` - Bienvenida
-- [ ] Implementar `/help` - Lista de comandos
-- [ ] Implementar `/status` - Estado actual
-- [ ] Implementar `/today` - Tareas de hoy
-- [ ] Crear `app/bot/keyboards.py` con inline keyboards
+#### 1.1 Handlers Básicos ✅
+- [x] Implementar `/start` - Bienvenida
+- [x] Implementar `/help` - Lista de comandos
+- [x] Implementar `/status` - Estado actual
+- [x] Implementar `/today` - Tareas de hoy
+- [x] Crear `app/bot/keyboards.py` con inline keyboards
 
-#### 1.2 Captura Rápida (Inbox)
-- [ ] Crear flujo: mensaje → clasificación → confirmación
-- [ ] Implementar detección de contexto básico
-- [ ] Guardar en Notion Inbox
-- [ ] Test: Capturar tarea desde Telegram
+#### 1.2 Captura Rápida (Inbox) ✅
+- [x] Crear flujo: mensaje → clasificación → confirmación
+- [x] Implementar detección de contexto básico
+- [x] Guardar en Notion Inbox
+- [x] Test: Capturar tarea desde Telegram
 
-#### 1.3 Comandos de Tareas
-- [ ] Implementar `/add [tarea]` - Agregar tarea rápida
-- [ ] Implementar `/doing` - Marcar tarea en progreso
-- [ ] Implementar `/done` - Completar tarea
-- [ ] Implementar `/block [razón]` - Marcar bloqueada
-- [ ] Test: Ciclo completo de tarea
-
----
-
-### Fase 2: DSPy Agents (Día 6-10)
-
-#### 2.1 Setup DSPy + Gemini
-- [ ] Crear `app/agents/base.py`
-- [ ] Configurar Gemini como LLM
-- [ ] Implementar retry logic
-- [ ] Implementar caching de respuestas
-- [ ] Test: Llamada básica a Gemini funciona
-
-#### 2.2 InboxProcessor Agent
-- [ ] Definir Signature DSPy
-- [ ] Implementar clasificación de mensajes
-- [ ] Implementar sugerencia de proyecto/contexto
-- [ ] Implementar nivel de confianza
-- [ ] Implementar preguntas de clarificación
-- [ ] Test: Clasificación precisa >80%
-
-#### 2.3 ComplexityAnalyzer Agent
-- [ ] Definir Signature DSPy
-- [ ] Implementar análisis de complejidad
-- [ ] Implementar sugerencia de división
-- [ ] Implementar estimación de tiempo
-- [ ] Test: Estimaciones razonables
-
-#### 2.4 SpendingAnalyzer Agent
-- [ ] Definir Signature DSPy
-- [ ] Implementar análisis de compra
-- [ ] Implementar impacto en presupuesto
-- [ ] Implementar impacto en deuda
-- [ ] Implementar preguntas honestas
-- [ ] Test: Análisis de compra $2,500
+#### 1.3 Comandos de Tareas ✅
+- [x] Implementar `/add [tarea]` - Agregar tarea rápida
+- [x] Implementar `/doing` - Marcar tarea en progreso
+- [x] Implementar `/done` - Completar tarea
+- [x] Implementar `/block [razón]` - Marcar bloqueada
+- [x] Test: Ciclo completo de tarea
 
 ---
 
-### Fase 3: Scheduler & Crons (Día 11-14)
+### Fase 2: DSPy Agents (Día 6-10) ✅ COMPLETADA
 
-#### 3.1 APScheduler Setup
-- [ ] Crear `app/scheduler/setup.py`
-- [ ] Configurar AsyncIOScheduler
-- [ ] Configurar timezone México
-- [ ] Integrar con FastAPI startup/shutdown
-- [ ] Test: Job simple ejecuta correctamente
+#### 2.1 Setup DSPy + Gemini ✅
+- [x] Crear `app/agents/base.py`
+- [x] Configurar Gemini como LLM
+- [x] Implementar Signatures DSPy (ClassifyMessage, ExtractTaskInfo, etc.)
+- [x] Implementar Modules DSPy (MessageClassifier, TaskExtractor, etc.)
+- [x] Test: Llamada básica a Gemini funciona
 
-#### 3.2 Morning Briefing (6:30 AM)
-- [ ] Crear `app/scheduler/jobs/morning_briefing.py`
-- [ ] Obtener tareas pendientes de Notion
-- [ ] Obtener tareas incompletas de ayer
-- [ ] Generar plan del día con MorningPlanner agent
-- [ ] Enviar mensaje a Telegram
-- [ ] Test: Mensaje de prueba enviado
+#### 2.2 InboxProcessor Agent ✅
+- [x] Definir Signature DSPy
+- [x] Implementar clasificación de mensajes
+- [x] Implementar sugerencia de proyecto/contexto
+- [x] Implementar nivel de confianza
+- [x] Implementar preguntas de clarificación
+- [x] Test: Clasificación precisa >80%
 
-#### 3.3 Hourly Check-in (9-18h)
-- [ ] Crear `app/scheduler/jobs/hourly_checkin.py`
-- [ ] Verificar si hay tarea activa
-- [ ] Preguntar status si no hay update en 1h
-- [ ] Manejar respuestas (bien/trabado/cambio)
-- [ ] Test: Check-in cada hora
+#### 2.3 ComplexityAnalyzer Agent ✅
+- [x] Definir Signature DSPy
+- [x] Implementar análisis de complejidad
+- [x] Implementar sugerencia de división
+- [x] Implementar estimación de tiempo
+- [x] Test: Estimaciones razonables
 
-#### 3.4 Gym Reminders (7:15, 7:30, 7:45)
-- [ ] Crear `app/scheduler/jobs/gym_reminder.py`
-- [ ] Verificar si ya confirmó gym
-- [ ] Escalación: gentle → normal → insistente
-- [ ] Permitir reprogramar/skip
-- [ ] Test: Secuencia de recordatorios
+#### 2.4 SpendingAnalyzer Agent ✅
+- [x] Definir Signature DSPy
+- [x] Implementar análisis de compra
+- [x] Implementar impacto en presupuesto
+- [x] Implementar impacto en deuda
+- [x] Implementar preguntas honestas
+- [x] Test: Análisis de compra $2,500
 
-#### 3.5 Nutrition Reminder (21:00)
-- [ ] Crear `app/scheduler/jobs/nutrition_reminder.py`
-- [ ] Preguntar qué comió hoy
-- [ ] Parsear respuesta con NutritionAnalyzer
-- [ ] Guardar en Notion Daily Nutrition
-- [ ] Test: Registro completo de día
+---
 
-#### 3.6 Pre-Payday Alert (Día 13 y 28)
-- [ ] Crear `app/scheduler/jobs/pre_payday.py`
-- [ ] Calcular gastos fijos del período
-- [ ] Calcular pagos de deuda
-- [ ] Generar plan con PaydayPlanner
-- [ ] Enviar resumen
-- [ ] Test: Alerta 2 días antes de quincena
+### Fase 3: Scheduler & Crons (Día 11-14) ✅ COMPLETADA
 
-#### 3.7 Weekly Review (Domingo 10:00)
-- [ ] Crear `app/scheduler/jobs/weekly_review.py`
-- [ ] Recopilar métricas de la semana:
+> **Nota:** Todos los jobs implementados y registrados en `app/scheduler/setup.py`
+
+#### 3.1 APScheduler Setup ✅
+- [x] Crear `app/scheduler/setup.py`
+- [x] Configurar AsyncIOScheduler
+- [x] Configurar timezone México
+- [x] Integrar con FastAPI startup/shutdown
+- [x] Test: Job simple ejecuta correctamente
+
+#### 3.2 Morning Briefing (6:30 AM) ✅
+- [x] Crear `app/scheduler/jobs/morning_briefing.py`
+- [x] Obtener tareas pendientes de Notion
+- [x] Obtener tareas incompletas de ayer
+- [x] Generar plan del día con MorningPlanner agent
+- [x] Enviar mensaje a Telegram
+- [x] Test: Mensaje de prueba enviado
+
+#### 3.3 Hourly Check-in (9-18h) ✅
+- [x] Crear `app/scheduler/jobs/hourly_checkin.py`
+- [x] Verificar si hay tarea activa
+- [x] Preguntar status si no hay update en 1h
+- [x] Manejar respuestas (bien/trabado/cambio)
+- [x] Test: Check-in cada hora
+
+#### 3.4 Gym Reminders (7:15, 7:30, 7:45) ✅
+- [x] Crear `app/scheduler/jobs/gym_reminder.py`
+- [x] Verificar si ya confirmó gym
+- [x] Escalación: gentle → normal → insistente
+- [x] Permitir reprogramar/skip
+- [x] Test: Secuencia de recordatorios
+
+#### 3.5 Nutrition Reminder (21:00) ✅
+- [x] Crear `app/scheduler/jobs/nutrition_reminder.py`
+- [x] Preguntar qué comió hoy
+- [x] Parsear respuesta con NutritionAnalyzer
+- [x] Guardar en Notion Daily Nutrition
+- [x] Test: Registro completo de día
+
+#### 3.6 Pre-Payday Alert (Día 13 y 28) ✅
+- [x] Crear `app/scheduler/jobs/payday_alert.py`
+- [x] Calcular gastos fijos del período
+- [x] Calcular pagos de deuda
+- [x] Generar plan de distribución
+- [x] Enviar resumen con keyboard de acciones
+- [x] Test: Alerta 2 días antes de quincena
+
+#### 3.7 Weekly Review (Domingo 10:00) ✅
+- [x] Crear `app/scheduler/jobs/weekly_review.py`
+- [x] Recopilar métricas de la semana:
   - Tareas completadas
   - Gym attendance
-  - Progreso de peso
-  - Gastos vs presupuesto
-- [ ] Generar resumen con ProgressAnalyzer
-- [ ] Test: Review completo
+  - Progreso de nutrición
+  - Gastos vs ingresos
+- [x] Generar resumen formateado
+- [x] Test: Review completo
 
-#### 3.8 Persistent Reminders (cada 30 min)
-- [ ] Crear `app/scheduler/jobs/persistent_reminders.py`
-- [ ] Leer reminders pendientes de SQLite
-- [ ] Aplicar lógica de escalación
-- [ ] Respetar horarios (no molestar en comida/noche)
-- [ ] Test: Recordatorio persiste hasta resolverse
-
----
-
-### Fase 4: Agents Avanzados (Día 15-20)
-
-#### 4.1 JiraHelper Agent
-- [ ] Definir Signature DSPy
-- [ ] Implementar generación de texto para Jira
-- [ ] Implementar formato de Historia de Usuario
-- [ ] Implementar sugerencia de tiempo
-- [ ] Test: Generar update de Jira
-
-#### 4.2 WorkoutLogger Agent
-- [ ] Definir Signature DSPy
-- [ ] Implementar parsing de ejercicios
-- [ ] Implementar comparación con sesión anterior
-- [ ] Implementar detección de PRs
-- [ ] Guardar en Notion Workouts
-- [ ] Test: Registrar sesión de gym
-
-#### 4.3 NutritionAnalyzer Agent
-- [ ] Definir Signature DSPy
-- [ ] Implementar parsing de comidas
-- [ ] Implementar estimación de calorías
-- [ ] Implementar evaluación de día
-- [ ] Implementar sugerencias
-- [ ] Test: Análisis de día completo
-
-#### 4.4 DebtStrategist Agent
-- [ ] Definir Signature DSPy
-- [ ] Implementar estrategia avalanche
-- [ ] Implementar proyección de pagos
-- [ ] Implementar cálculo de intereses ahorrados
-- [ ] Test: Plan de 10 meses
-
-#### 4.5 StudyBalancer Agent
-- [ ] Definir Signature DSPy
-- [ ] Implementar rotación de temas
-- [ ] Implementar detección de temas descuidados
-- [ ] Implementar sugerencia basada en energía
-- [ ] Test: Sugerencia balanceada
+#### 3.8 Persistent Reminders (cada 30 min) ✅
+- [x] Crear `app/scheduler/jobs/persistent_reminders.py`
+- [x] Leer reminders pendientes de SQLite
+- [x] Aplicar lógica de escalación
+- [x] Respetar horarios (no molestar en comida/noche)
+- [x] Test: Recordatorio persiste hasta resolverse
 
 ---
 
-### Fase 5: Flujos Conversacionales (Día 21-25)
+### Fase 4: Agents Avanzados (Día 15-20) ✅ COMPLETADA
 
-#### 5.1 Flujo: Captura Rápida
-- [ ] Usuario envía mensaje
-- [ ] Bot clasifica con InboxProcessor
-- [ ] Si confianza >80%: confirma clasificación
-- [ ] Si confianza 50-80%: pregunta específica
-- [ ] Si confianza <50%: pide contexto
-- [ ] Guardar en Notion
+#### 4.1 JiraHelper Agent ✅
+- [x] Definir Signature DSPy (GenerateJiraContent, GenerateUserStory)
+- [x] Implementar generación de texto para Jira
+- [x] Implementar formato de Historia de Usuario
+- [x] Implementar sugerencia de story points
+- [x] Test: Generar update de Jira
 
-#### 5.2 Flujo: Deep Work
-- [ ] Usuario inicia con `/deepwork [tarea]`
-- [ ] Bot confirma bloque de tiempo
-- [ ] Check-ins cada hora
-- [ ] Si bloqueado: ofrecer opciones
-- [ ] Al terminar: registrar tiempo real
+#### 4.2 WorkoutLogger Agent ✅
+- [x] Definir Signature DSPy (ParseWorkoutInput)
+- [x] Implementar parsing de ejercicios (JSON y manual)
+- [x] Implementar comparación con sesión anterior
+- [x] Implementar detección de PRs
+- [x] Guardar en Notion Workouts
+- [x] Test: Registrar sesión de gym
 
-#### 5.3 Flujo: Análisis de Compra
-- [ ] Usuario menciona precio ($X)
-- [ ] Bot detecta intención de compra
-- [ ] Analiza con SpendingAnalyzer
-- [ ] Muestra impacto en presupuesto/deuda
-- [ ] Ofrece opciones: comprar/wishlist/skip
+#### 4.3 NutritionAnalyzer Agent ✅
+- [x] Definir Signature DSPy
+- [x] Implementar parsing de comidas
+- [x] Implementar estimación de calorías
+- [x] Implementar evaluación de día
+- [x] Implementar sugerencias
+- [x] Test: Análisis de día completo
 
-#### 5.4 Flujo: Registro de Gym
-- [ ] Bot pregunta post-gym (o usuario inicia)
-- [ ] Muestra ejercicios de última sesión
-- [ ] Usuario actualiza pesos/reps
-- [ ] Bot detecta PRs y progreso
-- [ ] Guarda en Notion
+#### 4.4 DebtStrategist Agent ✅
+- [x] Definir Signature DSPy (AnalyzeDebtStrategy)
+- [x] Implementar estrategia avalanche/snowball/hybrid
+- [x] Implementar proyección de pagos
+- [x] Implementar cálculo de intereses ahorrados
+- [x] Implementar milestones
+- [x] Test: Plan de pago completo
 
-#### 5.5 Flujo: Registro de Comidas
-- [ ] Bot pregunta a las 21:00
-- [ ] Usuario describe todo el día
-- [ ] Bot parsea y analiza
-- [ ] Muestra breakdown y evaluación
-- [ ] Guarda en Notion
+#### 4.5 StudyBalancer Agent ✅
+- [x] Definir Signature DSPy (SuggestStudyTopic)
+- [x] Implementar rotación de temas
+- [x] Implementar detección de temas descuidados
+- [x] Implementar sugerencia basada en energía
+- [x] Implementar análisis de balance
+- [x] Test: Sugerencia balanceada
 
 ---
 
-### Fase 6: Polish & Optimización (Día 26-30)
+### Fase 5: Flujos Conversacionales (Día 21-25) ✅ COMPLETADA
 
-#### 6.1 Error Handling
-- [ ] Implementar manejo global de errores
-- [ ] Implementar retry con backoff
-- [ ] Implementar fallbacks para API failures
-- [ ] Logging estructurado
-- [ ] Alertas de errores críticos
+#### 5.1 Flujo: Captura Rápida ✅
+- [x] Usuario envía mensaje
+- [x] Bot clasifica con InboxProcessor
+- [x] Si confianza >80%: confirma clasificación
+- [x] Si confianza 50-80%: pregunta específica
+- [x] Si confianza <50%: pide contexto
+- [x] Guardar en Notion (Task o Inbox)
 
-#### 6.2 Performance
-- [ ] Implementar caching de Notion queries
+#### 5.2 Flujo: Deep Work ✅
+- [x] Usuario inicia con `/deepwork [tarea]`
+- [x] Bot confirma bloque de tiempo (1h/2h/3h)
+- [x] Actualiza tarea a "Doing"
+- [x] Si bloqueado: registra blocker
+- [x] Al terminar: registrar tiempo real
+
+#### 5.3 Flujo: Análisis de Compra ✅
+- [x] Usuario menciona precio ($X o X pesos)
+- [x] Bot detecta intención de compra
+- [x] Analiza con SpendingAnalyzer
+- [x] Muestra impacto en presupuesto/deuda
+- [x] Ofrece opciones: comprar/wishlist/freelance/skip
+
+#### 5.4 Flujo: Registro de Gym ✅
+- [x] Usuario inicia con `/gym` o `/workout`
+- [x] Selecciona tipo (Push/Pull/Legs/Cardio/Rest)
+- [x] Usuario describe ejercicios
+- [x] Bot parsea con WorkoutLogger
+- [x] Bot detecta PRs y progreso
+- [x] Guarda en Notion
+
+#### 5.5 Flujo: Registro de Comidas ✅
+- [x] Usuario inicia con `/food` o `/nutrition`
+- [x] Usuario describe todo el día
+- [x] Bot parsea y analiza con NutritionAnalyzer
+- [x] Muestra breakdown y evaluación
+- [x] Guarda en Notion
+
+---
+
+### Fase 6: Polish & Optimización (Día 26-30) 🔄 EN PROGRESO
+
+#### 6.1 Error Handling ✅
+- [x] Implementar manejo global de errores (`app/utils/errors.py`)
+- [x] Implementar retry con backoff (tenacity)
+- [x] Implementar fallbacks para API failures
+- [x] Logging estructurado con contexto
+- [ ] Alertas de errores críticos (Telegram)
+
+#### 6.2 Performance ✅
+- [x] Implementar caching de Notion queries (`app/utils/cache.py`)
+- [x] Cache con TTL configurable por tipo de dato
+- [x] Invalidación automática de cache en updates
 - [ ] Optimizar prompts de DSPy
-- [ ] Implementar rate limiting
 - [ ] Profiling de endpoints lentos
 
-#### 6.3 Métricas & Monitoring
-- [ ] Implementar métricas de agents (accuracy, latency)
-- [ ] Implementar métricas de uso
+#### 6.3 Métricas & Monitoring ✅
+- [x] Health check básico (`/health`)
+- [x] Health check detallado (`/health/detailed`)
+- [x] Estadísticas de cache
+- [x] Estado del scheduler
+- [ ] Métricas de agents (accuracy, latency)
 - [ ] Dashboard simple en Notion
-- [ ] Health checks detallados
 
-#### 6.4 Testing
+#### 6.4 Testing ⏸️ (Pausado por usuario)
 - [ ] Tests unitarios para agents
 - [ ] Tests de integración para flujos
 - [ ] Tests de scheduler jobs
@@ -624,4 +633,26 @@ python scripts/setup_telegram_webhook.py
 ---
 
 *Documento creado: Noviembre 2025*
-*Última actualización: {{ fecha_actual }}*
+*Última actualización: 28 Noviembre 2025*
+
+---
+
+## 📈 Estado Actual del Proyecto
+
+| Fase | Estado | Progreso |
+|------|--------|----------|
+| Fase 0: Setup Inicial | ✅ Completada | 100% |
+| Fase 1: Core Bot | ✅ Completada | 100% |
+| Fase 2: DSPy Agents | ✅ Completada | 100% |
+| Fase 3: Scheduler & Crons | ✅ Completada | 100% |
+| Fase 4: Agents Avanzados | ✅ Completada | 100% |
+| Fase 5: Flujos Conversacionales | ✅ Completada | 100% |
+| Fase 6: Polish & Optimización | 🔄 En progreso | ~70% |
+
+**Próximos pasos prioritarios:**
+1. ~~Implementar manejo global de errores~~ ✅
+2. ~~Implementar caching de Notion queries~~ ✅
+3. ~~Health checks detallados~~ ✅
+4. Alertas de errores críticos a Telegram
+5. README y documentación de deployment
+6. Tests unitarios (cuando se reactive)
