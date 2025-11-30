@@ -48,6 +48,12 @@ async def lifespan(app: FastAPI):
     logger.info(f"Entorno: {settings.app_env}")
     logger.info(f"Debug: {settings.debug}")
 
+    # Inicializar Core (LLM + Handlers)
+    from app.core import initialize_core
+
+    initialize_core()
+    logger.info("Core inicializado (LLM + Handlers)")
+
     # Inicializar base de datos
     from app.db.database import init_db, close_db
 
