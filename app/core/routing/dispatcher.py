@@ -1,8 +1,11 @@
 """
-Intent Dispatcher - Reemplaza route_by_intent de handlers.py.
+Intent Dispatcher - Punto de entrada unificado para procesamiento de mensajes.
 
-Este módulo usa el IntentHandlerRegistry para despachar intents
-de manera limpia, eliminando los 30+ if/elif.
+Este módulo usa el UnifiedOrchestrator para:
+1. Clasificar intenciones
+2. Enriquecer con agentes especializados
+3. Despachar al handler correcto con TODA la información
+4. Proporcionar feedback visual durante procesamiento
 """
 
 import logging
@@ -17,6 +20,18 @@ from app.core.routing.registry import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# Constantes de feedback
+PROCESSING_MESSAGES = {
+    "analyzing": "🔄 Analizando mensaje...",
+    "task_create": "📝 Preparando tarea...",
+    "task_query": "🔍 Buscando tareas...",
+    "expense_analyze": "💰 Analizando compra...",
+    "project_create": "📁 Creando proyecto...",
+    "reminder_create": "⏰ Configurando recordatorio...",
+    "plan_tomorrow": "📋 Planificando...",
+}
 
 
 async def _handle_custom_reminder_time(
@@ -208,11 +223,16 @@ async def handle_message_with_registry(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
     """
-    Handler principal de mensajes usando el nuevo sistema de registry.
+    Handler principal de mensajes usando el UnifiedOrchestrator.
 
-    Esta función puede reemplazar handle_message() de handlers.py
-    para usar la arquitectura modular.
+    Flujo:
+    1. Enviar feedback visual (mensaje de procesamiento)
+    2. Usar UnifiedOrchestrator para clasificar y enriquecer
+    3. Despachar al handler con TODA la información
+    4. Actualizar mensaje de feedback con resultado
     """
+    processing_msg = None
+
     try:
         text = update.message.text
         user = update.effective_user
@@ -225,21 +245,38 @@ async def handle_message_with_registry(
             await _handle_custom_reminder_time(update, context, text)
             return
 
-        # Intentar usar ConversationalOrchestrator primero
+        # 1. Enviar feedback visual inmediato
         try:
-            from app.agents.conversational_orchestrator import (
-                get_conversational_orchestrator,
+            processing_msg = await update.message.reply_text(
+                PROCESSING_MESSAGES["analyzing"]
             )
-            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        except Exception:
+            processing_msg = None
 
-            orchestrator = get_conversational_orchestrator()
+        # 2. Usar UnifiedOrchestrator
+        from app.agents.unified_orchestrator import get_unified_orchestrator
+        from app.agents.intent_router import IntentResult
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+        orchestrator = get_unified_orchestrator()
+
+        try:
             response = await orchestrator.process_message(
                 user_id=user_id,
                 message=text,
             )
 
-            # Si es respuesta contextual, manejarla directamente
-            if response.is_contextual or response.keyboard_options:
+            # Actualizar feedback según el intent
+            if processing_msg and response.intent:
+                feedback_key = response.intent.value
+                if feedback_key in PROCESSING_MESSAGES:
+                    try:
+                        await processing_msg.edit_text(PROCESSING_MESSAGES[feedback_key])
+                    except Exception:
+                        pass
+
+            # Si ya fue manejado por el orquestador (contextual)
+            if response.already_handled:
                 keyboard = None
                 if response.keyboard_options:
                     keyboard = InlineKeyboardMarkup([
@@ -253,66 +290,103 @@ async def handle_message_with_registry(
                         for row in response.keyboard_options
                     ])
 
+                # Eliminar mensaje de procesamiento y enviar respuesta
+                if processing_msg:
+                    try:
+                        await processing_msg.delete()
+                    except Exception:
+                        pass
+
                 await update.message.reply_html(
                     response.message,
                     reply_markup=keyboard,
                 )
                 return
 
-            # Si no es contextual, usar el registry con el intent detectado
-            from app.agents.intent_router import IntentResult
+            # 3. Construir IntentResult ENRIQUECIDO con toda la información
+            # Usar el nuevo método get_enriched_entities() que combina entities + enrichment
+            entities = response.get_enriched_entities()
 
             intent_result = IntentResult(
                 intent=response.intent,
-                confidence=0.8,
-                entities={},
+                confidence=response.confidence,
+                entities=entities,
                 suggested_response=None,
                 raw_message=text,
             )
 
-            await dispatch_intent(update, context, intent_result)
-            return
+            # 4. Guardar mensaje en contexto para futuras clasificaciones
+            last_messages = context.user_data.get("last_messages_list", [])
+            last_messages.append(text[:100])
+            if len(last_messages) > 5:
+                last_messages = last_messages[-5:]
+            context.user_data["last_messages_list"] = last_messages
+            context.user_data["last_messages"] = " | ".join(last_messages)
 
-        except Exception as e:
-            logger.warning(
-                f"ConversationalOrchestrator falló, usando fallback: {e}"
+            # Guardar enrichment para el handler
+            enrichment = response.enrichment
+            context.user_data["current_enrichment"] = {
+                "enricher": enrichment.enricher_name if enrichment else None,
+                "task_data": enrichment.task_data if enrichment else None,
+                "planning_data": enrichment.planning_data if enrichment else None,
+                "workout_data": enrichment.workout_data if enrichment else None,
+                "nutrition_data": enrichment.nutrition_data if enrichment else None,
+                "financial_analysis": enrichment.financial_analysis if enrichment else None,
+                "agents_used": response.agents_used,
+                "processing_time_ms": response.processing_time_ms,
+            }
+
+            # Log de la clasificación
+            logger.info(
+                f"Intent: {intent_result.intent.value}, "
+                f"Confidence: {intent_result.confidence:.2f}, "
+                f"Entities: {intent_result.entities}, "
+                f"Agents: {response.agents_used}"
             )
 
-        # Fallback: Usar IntentRouter directamente
-        from app.agents.intent_router import get_intent_router
+            # 5. Despachar usando el registry (eliminar mensaje de procesamiento)
+            if processing_msg:
+                try:
+                    await processing_msg.delete()
+                except Exception:
+                    pass
 
-        router = get_intent_router()
+            await dispatch_intent(update, context, intent_result)
 
-        # Obtener contexto de conversación
-        conversation_context = context.user_data.get("last_messages", "")
-
-        # Clasificar intención con AI
-        try:
-            intent_result = await router.execute(text, conversation_context)
         except Exception as e:
-            logger.exception(f"Error en IntentRouter, usando fallback: {e}")
-            intent_result = await router.get_fallback_intent(text)
+            logger.warning(f"UnifiedOrchestrator falló, usando fallback: {e}")
 
-        # Guardar mensaje en contexto para futuras clasificaciones
-        last_messages = context.user_data.get("last_messages_list", [])
-        last_messages.append(text[:100])
-        if len(last_messages) > 5:
-            last_messages = last_messages[-5:]
-        context.user_data["last_messages_list"] = last_messages
-        context.user_data["last_messages"] = " | ".join(last_messages)
+            # Fallback: Usar IntentRouter directamente
+            from app.agents.intent_router import get_intent_router
 
-        # Log de la clasificación
-        logger.info(
-            f"Intent: {intent_result.intent.value}, "
-            f"Confidence: {intent_result.confidence:.2f}, "
-            f"Entities: {intent_result.entities}"
-        )
+            router = get_intent_router()
+            conversation_context = context.user_data.get("last_messages", "")
 
-        # Despachar usando el registry
-        await dispatch_intent(update, context, intent_result)
+            try:
+                intent_result = await router.execute(text, conversation_context)
+            except Exception as e2:
+                logger.exception(f"Error en IntentRouter, usando fallback: {e2}")
+                intent_result = await router.get_fallback_intent(text)
+
+            # Eliminar mensaje de procesamiento
+            if processing_msg:
+                try:
+                    await processing_msg.delete()
+                except Exception:
+                    pass
+
+            await dispatch_intent(update, context, intent_result)
 
     except Exception as e:
         logger.exception(f"Error en handle_message_with_registry: {e}")
+
+        # Limpiar mensaje de procesamiento
+        if processing_msg:
+            try:
+                await processing_msg.delete()
+            except Exception:
+                pass
+
         await update.message.reply_text(
             "Ocurrió un error procesando tu mensaje. Por favor intenta de nuevo."
         )

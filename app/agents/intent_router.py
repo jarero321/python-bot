@@ -113,8 +113,16 @@ class ClassifyIntent(dspy.Signature):
         desc="""Entidades extraídas del mensaje en formato key:value separados por |
         Ejemplos:
         - 'amount:3000|item:airpods' para compras
-        - 'task:terminar reporte|date:mañana' para tareas
+        - 'task:terminar reporte|date:mañana|priority:normal' para tareas
+        - 'task:llamar al cliente|priority:urgent' para tareas urgentes
         - 'meal:desayuno|food:huevos con pan' para nutrición
+
+        Para tareas, SIEMPRE extraer priority si se menciona:
+        - urgent: "urgente", "crítico", "inmediato", "ASAP", "ya"
+        - high: "alta prioridad", "importante", "pronto"
+        - normal: sin indicador especial (default)
+        - low: "baja prioridad", "cuando pueda", "sin prisa"
+
         Dejar vacío si no hay entidades claras."""
     )
     suggested_response: str = dspy.OutputField(
@@ -316,6 +324,13 @@ class IntentRouterAgent(BaseAgent):
 
             entities = self._parse_entities(result.entities)
 
+            # Si es TASK_CREATE y no hay prioridad, intentar extraerla por keywords
+            if intent == UserIntent.TASK_CREATE and "priority" not in entities:
+                detected_priority = self._extract_priority(message)
+                if detected_priority:
+                    entities["priority"] = detected_priority
+                    self.logger.info(f"Prioridad detectada por keywords: {detected_priority}")
+
             suggested_response = result.suggested_response
             if suggested_response and suggested_response.lower() in ["none", "n/a", ""]:
                 suggested_response = None
@@ -419,12 +434,17 @@ class IntentRouterAgent(BaseAgent):
             )
 
         # Default: probablemente una tarea o nota
-        task_indicators = ["tengo que", "debo", "necesito", "hacer", "terminar", "completar"]
+        task_indicators = ["tengo que", "debo", "necesito", "hacer", "terminar", "completar", "tarea", "crear tarea"]
         if any(t in text_lower for t in task_indicators):
+            entities = {}
+            # Extraer prioridad si existe
+            detected_priority = self._extract_priority(message)
+            if detected_priority:
+                entities["priority"] = detected_priority
             return IntentResult(
                 intent=UserIntent.TASK_CREATE,
                 confidence=0.6,
-                entities={},
+                entities=entities,
                 suggested_response=None,
                 raw_message=message,
             )
@@ -437,6 +457,36 @@ class IntentRouterAgent(BaseAgent):
             suggested_response=None,
             raw_message=message,
         )
+
+    def _extract_priority(self, message: str) -> str | None:
+        """Extrae prioridad del mensaje basado en keywords."""
+        text_lower = message.lower()
+
+        # Urgente
+        urgent_keywords = [
+            "urgente", "crítico", "critico", "inmediato", "asap",
+            "ya mismo", "ahora", "cuanto antes", "emergencia"
+        ]
+        if any(kw in text_lower for kw in urgent_keywords):
+            return "urgent"
+
+        # Alta
+        high_keywords = [
+            "importante", "alta prioridad", "prioridad alta",
+            "pronto", "lo antes posible"
+        ]
+        if any(kw in text_lower for kw in high_keywords):
+            return "high"
+
+        # Baja
+        low_keywords = [
+            "baja prioridad", "prioridad baja", "cuando pueda",
+            "sin prisa", "no urgente", "algún día", "algun dia"
+        ]
+        if any(kw in text_lower for kw in low_keywords):
+            return "low"
+
+        return None
 
     def _extract_price(self, message: str) -> dict[str, str]:
         """Extrae precio del mensaje."""

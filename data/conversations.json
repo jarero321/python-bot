@@ -5,178 +5,205 @@
     "history": [
       {
         "role": "user",
-        "content": "Que recordatorios tengo?",
-        "timestamp": "2025-11-30T10:50:31.214886",
-        "intent": "reminder_query",
-        "entities": {}
-      },
-      {
-        "role": "assistant",
-        "content": "Entendido: reminder_query. Procesando...",
-        "timestamp": "2025-11-30T10:50:32.192350",
-        "intent": null,
-        "entities": {}
-      },
-      {
-        "role": "user",
-        "content": "Te puedo pedir que crees un recordatorio",
-        "timestamp": "2025-11-30T10:50:57.572215",
-        "intent": "reminder_create",
-        "entities": {}
-      },
-      {
-        "role": "assistant",
-        "content": "Entendido: reminder_create. Procesando...",
-        "timestamp": "2025-11-30T10:50:58.597085",
-        "intent": null,
-        "entities": {}
-      },
-      {
-        "role": "user",
-        "content": "El recordatorio se llamará llamar a Carla en 5 minutos",
-        "timestamp": "2025-11-30T10:51:23.674019",
-        "intent": "reminder_create",
+        "content": "Quiero crear una tarea revisar emails para agregarla a mi lista de pendientes",
+        "timestamp": "2025-11-30T11:05:55.276299",
+        "intent": "task_create",
         "entities": {
-          "name": "llamar a Carla",
-          "time": "en 5 minutos"
+          "task": "revisar emails"
         }
       },
       {
         "role": "assistant",
-        "content": "Entendido: reminder_create. Procesando...",
-        "timestamp": "2025-11-30T10:51:24.921634",
+        "content": "Tarea creada: <b>revisar emails</b>\n\nPosibles blockers:\n  ⚠️ Sobrecarga de emails\n  ⚠️ emails que requieran mucha investigación",
+        "timestamp": "2025-11-30T11:05:58.855444",
         "intent": null,
         "entities": {}
       },
       {
         "role": "user",
-        "content": "Que tareas tengo?",
-        "timestamp": "2025-11-30T10:53:04.639286",
-        "intent": "task_query",
+        "content": "Quiero crear una tarea revisar emails para agregarla a mi lista de pendientes",
+        "timestamp": "2025-11-30T11:08:19.852266",
+        "intent": "task_create",
         "entities": {
-          "task": "tareas"
+          "task": "revisar emails"
         }
       },
       {
         "role": "assistant",
-        "content": "Entendido: task_query. Procesando...",
-        "timestamp": "2025-11-30T10:53:06.786928",
+        "content": "Tarea creada: <b>revisar emails</b>\n\nPosibles blockers:\n  ⚠️ Sobrecarga de emails\n  ⚠️ emails que requieran mucha investigación",
+        "timestamp": "2025-11-30T11:08:22.297615",
         "intent": null,
         "entities": {}
       },
       {
         "role": "user",
-        "content": "Hola buenos días que tareas tengo para hoy?",
-        "timestamp": "2025-11-30T10:53:09.238211",
-        "intent": "task_query",
+        "content": "Crear tarea revisar emails",
+        "timestamp": "2025-11-30T11:13:23.137262",
+        "intent": "task_create",
         "entities": {
-          "date": "hoy"
+          "task": "revisar emails"
         }
       },
       {
         "role": "assistant",
-        "content": "Entendido: task_query. Procesando...",
-        "timestamp": "2025-11-30T10:53:10.318178",
+        "content": "Tarea creada: <b>revisar emails</b>\n\nPosibles blockers:\n  ⚠️ Conexión a internet lenta\n  ⚠️ interrupciones",
+        "timestamp": "2025-11-30T11:13:29.734702",
         "intent": null,
         "entities": {}
       },
       {
         "role": "user",
-        "content": "Hola buenos días crea un proyecto llamado Franco Freelance Script power Automate",
-        "timestamp": "2025-11-30T10:53:57.186328",
-        "intent": "project_create",
+        "content": "Crear tarea revisar emails",
+        "timestamp": "2025-11-30T11:14:05.191834",
+        "intent": "task_create",
         "entities": {
-          "project_name": "Franco Freelance Script power Automate"
+          "task": "revisar emails"
         }
       },
       {
         "role": "assistant",
-        "content": "Proyecto: <b>Franco Freelance Script power Automate</b>\n¿Qué tipo de proyecto es?",
-        "timestamp": "2025-11-30T10:54:03.771102",
+        "content": "Tarea creada: <b>revisar emails</b>\n\nPosibles blockers:\n  ⚠️ Conexión a internet lenta\n  ⚠️ interrupciones",
+        "timestamp": "2025-11-30T11:14:06.737477",
         "intent": null,
         "entities": {}
       },
       {
         "role": "user",
-        "content": "Puedes crearme un recordatorio de comer",
-        "timestamp": "2025-11-30T10:55:15.132399",
-        "intent": "reminder_create",
+        "content": "Quiero crear una tarea revisar pendientes",
+        "timestamp": "2025-11-30T11:15:00.374292",
+        "intent": "task_create",
         "entities": {
-          "reminder": "comer"
+          "task": "revisar pendientes"
         }
       },
       {
         "role": "assistant",
-        "content": "Entendido: reminder_create. Procesando...",
-        "timestamp": "2025-11-30T10:55:17.681059",
+        "content": "Tarea creada: <b>revisar pendientes</b>\n\nPosibles blockers:\n  ⚠️ Falta de claridad en la descripción de los pendientes\n  ⚠️ falta de acceso a la lista de pendientes",
+        "timestamp": "2025-11-30T11:15:04.353020",
         "intent": null,
         "entities": {}
       },
       {
         "role": "user",
-        "content": "Para hoy",
-        "timestamp": "2025-11-30T10:56:46.187714",
-        "intent": "reminder_query",
+        "content": "Quiero crear una tarea para ir a jugar borderlands 2",
+        "timestamp": "2025-11-30T11:15:27.029724",
+        "intent": "task_create",
         "entities": {
-          "date": "hoy"
+          "task": "ir a jugar borderlands 2"
         }
       },
       {
         "role": "assistant",
-        "content": "Entendido: reminder_query. Procesando...",
-        "timestamp": "2025-11-30T10:56:49.964521",
+        "content": "Tarea creada: <b>ir a jugar borderlands 2</b>\n\nPosibles blockers:\n  ⚠️ Other commitments\n  ⚠️ Internet outage",
+        "timestamp": "2025-11-30T11:15:31.746424",
         "intent": null,
         "entities": {}
       },
       {
         "role": "user",
-        "content": "Hola buenos días",
-        "timestamp": "2025-11-30T10:58:17.483092",
-        "intent": "greeting",
-        "entities": {}
-      },
-      {
-        "role": "assistant",
-        "content": "¡Hola! ¿En qué puedo ayudarte hoy?",
-        "timestamp": "2025-11-30T10:58:19.898407",
-        "intent": null,
-        "entities": {}
-      },
-      {
-        "role": "user",
-        "content": "Puedes crear un recordatorio en 5 minutos? Para comer",
-        "timestamp": "2025-11-30T10:58:27.850453",
-        "intent": "reminder_create",
+        "content": "Crear tarea de revisar pendientes",
+        "timestamp": "2025-11-30T11:17:15.326354",
+        "intent": "task_create",
         "entities": {
-          "time": "5 minutos",
-          "task": "comer"
+          "task": "revisar pendientes"
         }
       },
       {
         "role": "assistant",
-        "content": "Entendido: reminder_create. Procesando...",
-        "timestamp": "2025-11-30T10:58:28.878146",
+        "content": "",
+        "timestamp": "2025-11-30T11:17:20.435098",
+        "intent": null,
+        "entities": {}
+      },
+      {
+        "role": "user",
+        "content": "Tarea urgente llamar a cliente",
+        "timestamp": "2025-11-30T11:18:09.723488",
+        "intent": "task_create",
+        "entities": {
+          "task": "llamar a cliente",
+          "priority": "urgente"
+        }
+      },
+      {
+        "role": "assistant",
+        "content": "",
+        "timestamp": "2025-11-30T11:18:12.184922",
+        "intent": null,
+        "entities": {}
+      },
+      {
+        "role": "user",
+        "content": "Tarea urgente llamar a cliente de famsa",
+        "timestamp": "2025-11-30T11:24:34.867555",
+        "intent": "task_create",
+        "entities": {
+          "task": "llamar a cliente de famsa",
+          "priority": "urgent"
+        }
+      },
+      {
+        "role": "assistant",
+        "content": "",
+        "timestamp": "2025-11-30T11:24:40.504368",
+        "intent": null,
+        "entities": {}
+      },
+      {
+        "role": "user",
+        "content": "Tarea urgente: sacar a los perros",
+        "timestamp": "2025-11-30T11:25:06.363966",
+        "intent": "task_create",
+        "entities": {
+          "task": "sacar a los perros",
+          "priority": "urgent"
+        }
+      },
+      {
+        "role": "assistant",
+        "content": "",
+        "timestamp": "2025-11-30T11:25:08.957189",
         "intent": null,
         "entities": {}
       }
     ],
     "active_entity": {
-      "entity_type": "project",
-      "entity_id": null,
-      "entity_name": "Franco Freelance Script power Automate",
+      "entity_type": "task",
+      "entity_id": "2bb9fe93-ba02-8133-bc74-f1add11e072a",
+      "entity_name": "ir a jugar borderlands 2",
       "entity_data": {
-        "project_name": "Franco Freelance Script power Automate",
-        "suggested_type": "🏠 Personal",
-        "genera_dinero": false,
-        "en_rotacion_estudio": false
+        "task_title": "ir a jugar borderlands 2",
+        "complexity": {
+          "level": "quick",
+          "estimated_minutes": 60,
+          "energy_required": "low",
+          "should_divide": false,
+          "subtasks": [],
+          "blockers": [
+            "Other commitments",
+            "Internet outage"
+          ],
+          "requires_research": false
+        },
+        "urgency_score": 0,
+        "suggested_context": "Freelance-PA",
+        "suggested_priority": "🔄 Normal",
+        "suggested_bloque": "🌆 Evening",
+        "suggested_fecha_do": null,
+        "suggested_fecha_due": null,
+        "project": {
+          "id": null,
+          "name": null
+        },
+        "reminders": []
       },
       "subtasks": [],
       "suggested_subtasks": [],
       "blockers": [],
-      "created_at": "2025-11-30T10:54:03.771086"
+      "created_at": "2025-11-30T11:15:31.746397"
     },
     "pending_action": null,
-    "last_intent": "reminder_create",
-    "last_activity": "2025-11-30T10:58:28.878150"
+    "last_intent": "task_create",
+    "last_activity": "2025-11-30T11:25:08.957191"
   }
 }

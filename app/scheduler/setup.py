@@ -57,6 +57,10 @@ async def setup_scheduler() -> AsyncIOScheduler:
         send_evening_planning_prompt,
         send_morning_plan_reminder,
     )
+    from app.scheduler.jobs.rag_sync import (
+        sync_rag_index_job,
+        cleanup_stale_rag_entries_job,
+    )
 
     # ==================== MORNING BRIEFING ====================
     # 6:30 AM todos los días
@@ -264,6 +268,28 @@ async def setup_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
     logger.info("Job configurado: Morning Plan Reminder (7:30 AM)")
+
+    # ==================== RAG SYNC ====================
+
+    # Sincronización RAG cada 15 minutos
+    scheduler.add_job(
+        sync_rag_index_job,
+        IntervalTrigger(minutes=15),
+        id="rag_sync",
+        name="RAG Index Sync",
+        replace_existing=True,
+    )
+    logger.info("Job configurado: RAG Index Sync (cada 15 min)")
+
+    # Limpieza de RAG (4 AM diario)
+    scheduler.add_job(
+        cleanup_stale_rag_entries_job,
+        CronTrigger(hour=4, minute=0),
+        id="rag_cleanup",
+        name="RAG Cleanup",
+        replace_existing=True,
+    )
+    logger.info("Job configurado: RAG Cleanup (4:00 AM)")
 
     # Iniciar scheduler si no está corriendo
     if not scheduler.running:

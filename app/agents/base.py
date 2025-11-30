@@ -260,7 +260,7 @@ class EstimateMealCalories(dspy.Signature):
     )
 
 
-# ==================== MÓDULOS DSPy ====================
+# ==================== MÓDULOS DSPy (usados por InboxProcessor) ====================
 
 
 class MessageClassifier(dspy.Module):
@@ -283,72 +283,3 @@ class TaskExtractor(dspy.Module):
 
     def forward(self, message: str) -> dspy.Prediction:
         return self.extract(message=message)
-
-
-class ComplexityAnalyzer(dspy.Module):
-    """Módulo para analizar complejidad de tareas."""
-
-    def __init__(self):
-        super().__init__()
-        self.analyze = dspy.ChainOfThought(AnalyzeComplexity)
-
-    def forward(self, task_description: str) -> dspy.Prediction:
-        return self.analyze(task_description=task_description)
-
-
-class SpendingAnalyzer(dspy.Module):
-    """Módulo para analizar compras."""
-
-    def __init__(self):
-        super().__init__()
-        self.analyze = dspy.ChainOfThought(AnalyzeSpending)
-
-    def forward(
-        self,
-        purchase_description: str,
-        monthly_budget: float,
-        current_debt: float,
-    ) -> dspy.Prediction:
-        return self.analyze(
-            purchase_description=purchase_description,
-            monthly_budget=monthly_budget,
-            current_debt=current_debt,
-        )
-
-
-class MorningPlanner(dspy.Module):
-    """Módulo para generar el plan del día."""
-
-    def __init__(self):
-        super().__init__()
-        self.plan = dspy.ChainOfThought(GenerateMorningPlan)
-
-    def forward(
-        self,
-        pending_tasks: str,
-        calendar_events: str,
-        yesterday_incomplete: str,
-    ) -> dspy.Prediction:
-        return self.plan(
-            pending_tasks=pending_tasks,
-            calendar_events=calendar_events,
-            yesterday_incomplete=yesterday_incomplete,
-        )
-
-
-class NutritionAnalyzer(dspy.Module):
-    """Módulo para analizar nutrición."""
-
-    def __init__(self):
-        super().__init__()
-        self.analyze = dspy.ChainOfThought(AnalyzeNutrition)
-
-    def forward(
-        self,
-        meals_description: str,
-        fitness_goal: str = "maintain",
-    ) -> dspy.Prediction:
-        return self.analyze(
-            meals_description=meals_description,
-            fitness_goal=fitness_goal,
-        )

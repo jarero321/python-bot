@@ -361,6 +361,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         elif action == "task_create_inbox":
             await handle_task_to_inbox(query, context)
 
+        elif action == "task_view":
+            task_id = parts[1] if len(parts) > 1 else None
+            await handle_task_view(query, context, task_id)
+
         elif action in ("task_cancel", "task_action_cancel", "task_delete_cancel"):
             await query.edit_message_text("❌ Operación cancelada.")
 
@@ -398,6 +402,19 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         elif action == "reminder_cancel":
             await query.edit_message_text("❌ Recordatorio cancelado.")
+
+        elif action == "reminder_done":
+            reminder_id = int(parts[1]) if len(parts) > 1 else None
+            await handle_reminder_done(query, context, reminder_id)
+
+        elif action == "reminder_snooze":
+            reminder_id = int(parts[1]) if len(parts) > 1 else None
+            minutes = int(parts[2]) if len(parts) > 2 else 30
+            await handle_reminder_snooze(query, context, reminder_id, minutes)
+
+        elif action == "reminder_dismiss":
+            reminder_id = int(parts[1]) if len(parts) > 1 else None
+            await handle_reminder_dismiss(query, context, reminder_id)
 
         # Plan callbacks
         elif action == "plan_accept":
@@ -520,29 +537,142 @@ async def handle_task_complete_callback(query, context, task_id: str | None) -> 
 
 async def handle_task_create_confirm(query, context) -> None:
     """Confirma la creación de una tarea."""
+    import re
+
     pending = context.user_data.get("pending_task", {})
     title = pending.get("title", "")
+    priority_str = pending.get("priority", "normal")
+
+    # Si no hay pending en context, intentar extraer del mensaje original
+    if not title and query.message and query.message.text:
+        msg_text = query.message.text
+
+        # Extraer prioridad del mensaje si existe (verificar antes de extraer título)
+        extracted_priority = "normal"
+        if "🔥" in msg_text:
+            extracted_priority = "urgent"
+        elif "⚡" in msg_text and ("Alta" in msg_text or "alta" in msg_text):
+            extracted_priority = "high"
+        elif "🧊" in msg_text:
+            extracted_priority = "low"
+
+        # El mensaje tiene varios formatos posibles:
+        # 1. "📋 Nueva tarea detectada\n\n<título>\n🔥 Prioridad: Urgente\n\nConfianza..."
+        # 2. "📋 Nueva tarea detectada\n\n<título>\n\nConfianza..."
+        # 3. "⚠️ Posible duplicado...\nNueva: <título> 🔥\n\nSimilar..."
+        # 4. "⚠️ Posible duplicado...\nNueva: <título>\n\nSimilar..."
+
+        # Para duplicado: extraer después de "Nueva:" hasta emoji o newline con "Similar"
+        match = re.search(r"Nueva:\s*(.+?)(?:\s*[🔥⚡🧊]|\n\nSimilar)", msg_text, re.DOTALL)
+        if match:
+            title = match.group(1).strip()
+        else:
+            # Para normal: después de "Nueva tarea detectada" hasta prioridad o confianza
+            match = re.search(r"Nueva tarea detectada.*?\n\n(.+?)(?:\n🔥|\n⚡|\n🧊|\n\nConfianza)", msg_text, re.DOTALL)
+            if match:
+                title = match.group(1).strip()
+
+        if title:
+            # Limpiar emojis del título si los tiene al final
+            title = re.sub(r"\s*[🔥⚡🧊]\s*$", "", title).strip()
+
+            # Guardar para uso posterior
+            context.user_data["pending_task"] = {"title": title, "priority": extracted_priority}
+            priority_str = extracted_priority
 
     if not title:
         await query.edit_message_text("❌ No hay tarea pendiente.")
         return
 
     from app.domain.services import get_task_service
-    from app.domain.entities.task import Task, TaskStatus
+    from app.domain.entities.task import Task, TaskStatus, TaskPriority
+
+    # Mapear prioridad
+    priority_map = {
+        "urgente": TaskPriority.URGENT,
+        "urgent": TaskPriority.URGENT,
+        "alta": TaskPriority.HIGH,
+        "high": TaskPriority.HIGH,
+        "normal": TaskPriority.NORMAL,
+        "baja": TaskPriority.LOW,
+        "low": TaskPriority.LOW,
+    }
+    priority = priority_map.get(priority_str.lower(), TaskPriority.NORMAL)
 
     service = get_task_service()
-    new_task = Task(id="", title=title, status=TaskStatus.TODAY)
+    new_task = Task(id="", title=title, status=TaskStatus.TODAY, priority=priority)
     created, _ = await service.create(new_task, check_duplicates=False)
 
     # Limpiar pending
     context.user_data.pop("pending_task", None)
 
+    priority_emoji = {
+        TaskPriority.URGENT: "🔥 Urgente",
+        TaskPriority.HIGH: "⚡ Alta",
+        TaskPriority.NORMAL: "🔄 Normal",
+        TaskPriority.LOW: "🧊 Baja",
+    }.get(priority, "🔄 Normal")
+
     await query.edit_message_text(
         f"✅ <b>Tarea creada</b>\n\n"
         f"<i>{created.title}</i>\n\n"
-        f"Estado: 🎯 Hoy",
+        f"Estado: 🎯 Hoy\n"
+        f"Prioridad: {priority_emoji}",
         parse_mode="HTML",
     )
+
+
+async def handle_task_view(query, context, task_id: str | None) -> None:
+    """Muestra detalles de una tarea existente."""
+    if not task_id:
+        await query.edit_message_text("❌ ID de tarea no válido.")
+        return
+
+    from app.domain.services import get_task_service
+
+    service = get_task_service()
+
+    try:
+        task = await service.get_by_id(task_id)
+
+        if not task:
+            await query.edit_message_text("❌ Tarea no encontrada.")
+            return
+
+        status_names = {
+            "backlog": "📥 Backlog",
+            "planned": "📋 Planificada",
+            "today": "🎯 Hoy",
+            "doing": "⚡ En Progreso",
+            "paused": "⏸️ Pausada",
+            "done": "✅ Completada",
+            "cancelled": "❌ Cancelada",
+        }
+
+        priority_names = {
+            "urgent": "🔥 Urgente",
+            "high": "⚡ Alta",
+            "normal": "🔄 Normal",
+            "low": "🧊 Baja",
+        }
+
+        status_str = status_names.get(task.status.value, task.status.value)
+        priority_str = priority_names.get(task.priority.value, task.priority.value) if task.priority else "Sin prioridad"
+
+        message = (
+            f"<b>{task.title}</b>\n\n"
+            f"Estado: {status_str}\n"
+            f"Prioridad: {priority_str}"
+        )
+
+        if task.due_date:
+            message += f"\n📅 Vence: {task.due_date.strftime('%d/%m/%Y')}"
+
+        await query.edit_message_text(message, parse_mode="HTML")
+
+    except Exception as e:
+        logger.error(f"Error viendo tarea: {e}")
+        await query.edit_message_text("❌ Error al cargar la tarea.")
 
 
 async def handle_task_to_inbox(query, context) -> None:
@@ -775,6 +905,71 @@ async def handle_show_urgent_tasks(query, context) -> None:
         message += f"• {task.title}{overdue}\n"
 
     await query.edit_message_text(message, parse_mode="HTML")
+
+
+async def handle_reminder_done(query, context, reminder_id: int | None) -> None:
+    """Marca un recordatorio como completado."""
+    if not reminder_id:
+        await query.edit_message_text("❌ ID de recordatorio no válido.")
+        return
+
+    from app.services.reminder_service import get_reminder_service
+
+    service = get_reminder_service()
+    success = await service.mark_completed(reminder_id)
+
+    if success:
+        await query.edit_message_text(
+            "✅ <b>Recordatorio completado</b>\n\n¡Buen trabajo!",
+            parse_mode="HTML",
+        )
+    else:
+        await query.edit_message_text("❌ No se pudo completar el recordatorio.")
+
+
+async def handle_reminder_snooze(query, context, reminder_id: int | None, minutes: int) -> None:
+    """Pospone un recordatorio."""
+    if not reminder_id:
+        await query.edit_message_text("❌ ID de recordatorio no válido.")
+        return
+
+    from app.services.reminder_service import get_reminder_service
+
+    service = get_reminder_service()
+    success = await service.snooze_reminder(reminder_id, minutes)
+
+    if success:
+        if minutes >= 60:
+            time_str = f"{minutes // 60} hora{'s' if minutes >= 120 else ''}"
+        else:
+            time_str = f"{minutes} minutos"
+
+        await query.edit_message_text(
+            f"⏰ <b>Recordatorio pospuesto</b>\n\nTe recordaré en {time_str}",
+            parse_mode="HTML",
+        )
+    else:
+        await query.edit_message_text("❌ No se pudo posponer el recordatorio.")
+
+
+async def handle_reminder_dismiss(query, context, reminder_id: int | None) -> None:
+    """Descarta un recordatorio."""
+    if not reminder_id:
+        await query.edit_message_text("❌ ID de recordatorio no válido.")
+        return
+
+    from app.services.reminder_service import get_reminder_service
+
+    service = get_reminder_service()
+    success = await service.cancel_reminder(reminder_id)
+
+    if success:
+        await query.edit_message_text(
+            "❌ <b>Recordatorio descartado</b>",
+            parse_mode="HTML",
+        )
+    else:
+        await query.edit_message_text("❌ No se pudo descartar el recordatorio.")
 
 
 # ==================== APPLICATION SETUP ====================

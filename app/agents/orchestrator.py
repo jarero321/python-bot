@@ -15,7 +15,6 @@ from app.agents.workout_logger import WorkoutLoggerAgent
 from app.agents.spending_analyzer import SpendingAnalyzerAgent
 from app.agents.debt_strategist import DebtStrategistAgent
 from app.agents.study_balancer import StudyBalancerAgent, EnergyLevel as StudyEnergyLevel
-from app.agents.jira_helper import JiraHelperAgent
 from app.services.notion import (
     get_notion_service,
     TaskEstado,
@@ -138,7 +137,6 @@ class AgentOrchestrator:
         self._spending_analyzer: SpendingAnalyzerAgent | None = None
         self._debt_strategist: DebtStrategistAgent | None = None
         self._study_balancer: StudyBalancerAgent | None = None
-        self._jira_helper: JiraHelperAgent | None = None
 
         # Cache de contexto
         self._context_cache: UserContext | None = None
@@ -221,12 +219,6 @@ class AgentOrchestrator:
         if self._study_balancer is None:
             self._study_balancer = StudyBalancerAgent()
         return self._study_balancer
-
-    @property
-    def jira_helper(self) -> JiraHelperAgent:
-        if self._jira_helper is None:
-            self._jira_helper = JiraHelperAgent()
-        return self._jira_helper
 
     # ==================== CONTEXTO ====================
 

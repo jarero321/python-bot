@@ -100,7 +100,7 @@ def format_task_detail(task: Task) -> str:
 
 @intent_handler(UserIntent.TASK_CREATE)
 class TaskCreateHandler(BaseIntentHandler):
-    """Handler para crear tareas con detección de duplicados."""
+    """Handler para crear tareas con detección de duplicados y enriquecimiento."""
 
     name = "TaskCreateHandler"
     intents = [UserIntent.TASK_CREATE]
@@ -122,14 +122,28 @@ class TaskCreateHandler(BaseIntentHandler):
         # Extraer título de la tarea
         task_title = entities.get("task", text[:100])
 
+        # Obtener enriquecimiento del UnifiedOrchestrator
+        complexity = entities.get("_complexity", {})
+        subtasks = entities.get("_subtasks", [])
+        blockers = entities.get("_blockers", [])
+        suggested_context = entities.get("_context")
+        suggested_dates = entities.get("_dates", {})
+        reminders = entities.get("_reminders", [])
+
         # Verificar duplicados con RAG
         duplicate_check = await self._service.check_duplicate(task_title)
 
-        # Guardar en context para cuando confirme
+        # Guardar en context para cuando confirme (incluir enriquecimiento)
         context.user_data["pending_task"] = {
             "title": task_title,
             "priority": entities.get("priority", "normal"),
-            "due_date": entities.get("due_date"),
+            "due_date": entities.get("due_date") or suggested_dates.get("fecha_due"),
+            "fecha_do": suggested_dates.get("fecha_do"),
+            "context": suggested_context,
+            "complexity": complexity,
+            "subtasks": subtasks,
+            "blockers": blockers,
+            "reminders": reminders,
         }
 
         # Si hay duplicado probable, mostrar advertencia
@@ -157,9 +171,19 @@ class TaskCreateHandler(BaseIntentHandler):
                 ],
             ])
 
+            # Mostrar prioridad si no es normal
+            priority_str = entities.get("priority", "normal")
+            priority_display = ""
+            if priority_str == "urgent":
+                priority_display = " 🔥"
+            elif priority_str == "high":
+                priority_display = " ⚡"
+            elif priority_str == "low":
+                priority_display = " 🧊"
+
             message = (
                 f"⚠️ <b>Posible duplicado detectado</b>\n\n"
-                f"<b>Nueva:</b> <i>{task_title}</i>\n\n"
+                f"<b>Nueva:</b> <i>{task_title}</i>{priority_display}\n\n"
                 f"<b>Similar existente:</b>\n"
                 f"<i>{similar['title'] if similar else 'N/A'}</i>\n"
                 f"Similitud: {duplicate_check.confidence:.0%}\n\n"
@@ -171,23 +195,79 @@ class TaskCreateHandler(BaseIntentHandler):
                 keyboard=keyboard,
             )
 
-        # Sin duplicado, flujo normal
-        keyboard = confirm_keyboard(
-            confirm_data="task_create_confirm",
-            cancel_data="task_create_inbox",
-            confirm_text="✅ Crear tarea",
-            cancel_text="📥 Guardar en Inbox",
-        )
+        # Sin duplicado, construir mensaje con enriquecimiento
+        msg_parts = [f"📋 <b>Nueva tarea detectada</b>\n", f"<i>{task_title}</i>"]
 
-        message = (
-            f"📋 <b>Nueva tarea detectada</b>\n\n"
-            f"<i>{task_title}</i>\n\n"
-            f"Confianza: {confidence:.0%}"
-        )
+        # Mostrar prioridad
+        priority_str = entities.get("priority", "normal")
+        if priority_str == "urgent":
+            msg_parts.append("\n🔥 <b>Prioridad:</b> Urgente")
+        elif priority_str == "high":
+            msg_parts.append("\n⚡ <b>Prioridad:</b> Alta")
+        elif priority_str == "low":
+            msg_parts.append("\n🧊 <b>Prioridad:</b> Baja")
+
+        # Mostrar análisis de complejidad
+        if complexity:
+            level = complexity.get("level", "standard")
+            minutes = complexity.get("estimated_minutes", 0)
+            energy = complexity.get("energy_required", "medium")
+
+            complexity_emoji = {"quick": "⚡", "standard": "🔄", "heavy": "🏋️", "epic": "🚀"}.get(level, "🔄")
+            energy_emoji = {"deep_work": "🧠", "medium": "💪", "low": "😌"}.get(energy, "💪")
+
+            msg_parts.append(f"\n\n<b>Análisis:</b>")
+            msg_parts.append(f"{complexity_emoji} Complejidad: {level}")
+            if minutes:
+                hours = minutes // 60
+                mins = minutes % 60
+                time_str = f"{hours}h {mins}m" if hours else f"{mins}m"
+                msg_parts.append(f"⏱️ Tiempo estimado: {time_str}")
+            msg_parts.append(f"{energy_emoji} Energía: {energy}")
+
+        # Mostrar subtareas sugeridas
+        if subtasks:
+            msg_parts.append(f"\n\n<b>Subtareas sugeridas:</b>")
+            for i, sub in enumerate(subtasks[:5], 1):
+                msg_parts.append(f"  {i}. {sub}")
+            msg_parts.append("\n<i>Puedes modificarlas después de crear</i>")
+
+        # Mostrar blockers
+        if blockers:
+            msg_parts.append(f"\n\n⚠️ <b>Posibles blockers:</b>")
+            for blocker in blockers[:3]:
+                msg_parts.append(f"  • {blocker}")
+
+        # Mostrar fechas sugeridas
+        if suggested_dates.get("fecha_do") or suggested_dates.get("fecha_due"):
+            msg_parts.append(f"\n\n📅 <b>Fechas sugeridas:</b>")
+            if suggested_dates.get("fecha_do"):
+                msg_parts.append(f"  Hacer: {suggested_dates['fecha_do']}")
+            if suggested_dates.get("fecha_due"):
+                msg_parts.append(f"  Deadline: {suggested_dates['fecha_due']}")
+
+        msg_parts.append(f"\n\n<i>Confianza: {confidence:.0%}</i>")
+
+        # Keyboard con opciones
+        keyboard_buttons = [
+            [
+                InlineKeyboardButton("✅ Crear tarea", callback_data="task_create_confirm"),
+                InlineKeyboardButton("📥 Inbox", callback_data="task_create_inbox"),
+            ],
+        ]
+
+        if subtasks:
+            keyboard_buttons.append([
+                InlineKeyboardButton("✏️ Editar subtareas", callback_data="task_edit_subtasks"),
+            ])
+
+        keyboard_buttons.append([
+            InlineKeyboardButton("❌ Cancelar", callback_data="task_cancel"),
+        ])
 
         return HandlerResponse(
-            message=message,
-            keyboard=keyboard,
+            message="\n".join(msg_parts),
+            keyboard=InlineKeyboardMarkup(keyboard_buttons),
         )
 
 

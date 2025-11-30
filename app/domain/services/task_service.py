@@ -146,8 +146,22 @@ class TaskService:
         return success
 
     async def complete(self, task_id: str) -> Task | None:
-        """Completa una tarea."""
-        return await self._repo.complete(task_id)
+        """Completa una tarea y re-indexa en RAG."""
+        completed = await self._repo.complete(task_id)
+
+        # Re-indexar en RAG para mantener consistencia
+        if completed and self._rag_enabled:
+            try:
+                await self._retriever.index_task(completed)
+                logger.debug(f"Tarea {task_id} re-indexada en RAG después de completar")
+            except Exception as e:
+                logger.warning(f"Error re-indexando tarea completada: {e}")
+
+        return completed
+
+    async def get_by_id(self, task_id: str) -> Task | None:
+        """Obtiene una tarea por su ID."""
+        return await self._repo.get_by_id(task_id)
 
     # ==================== Búsqueda ====================
 
@@ -352,8 +366,18 @@ class TaskService:
         return await self._repo.get_workload_summary()
 
     async def update_status(self, task_id: str, status: TaskStatus) -> Task | None:
-        """Actualiza estado de una tarea."""
-        return await self._repo.update_status(task_id, status)
+        """Actualiza estado de una tarea y re-indexa en RAG."""
+        updated = await self._repo.update_status(task_id, status)
+
+        # Re-indexar en RAG para mantener consistencia
+        if updated and self._rag_enabled:
+            try:
+                await self._retriever.index_task(updated)
+                logger.debug(f"Tarea {task_id} re-indexada en RAG después de cambio de estado")
+            except Exception as e:
+                logger.warning(f"Error re-indexando tarea en RAG: {e}")
+
+        return updated
 
     # ==================== Indexación Batch ====================
 

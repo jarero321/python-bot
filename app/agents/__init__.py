@@ -4,10 +4,6 @@ from app.agents.base import (
     setup_dspy,
     MessageClassifier,
     TaskExtractor,
-    ComplexityAnalyzer,
-    SpendingAnalyzer as SpendingSignature,
-    GenerateMorningPlan,
-    AnalyzeNutrition,
 )
 
 from app.agents.inbox_processor import (
@@ -49,13 +45,6 @@ from app.agents.workout_logger import (
     Exercise,
     ExerciseSet,
     WorkoutResult,
-)
-
-from app.agents.jira_helper import (
-    JiraHelperAgent,
-    JiraContentResult,
-    UserStoryResult,
-    quick_jira_update,
 )
 
 from app.agents.debt_strategist import (
@@ -109,12 +98,6 @@ from app.agents.conversation_context import (
     get_conversation_store,
 )
 
-from app.agents.conversational_orchestrator import (
-    ConversationalOrchestrator,
-    ConversationalResponse,
-    get_conversational_orchestrator,
-)
-
 from app.agents.planning_assistant import (
     PlanningAssistant,
     TomorrowPlan,
@@ -123,16 +106,31 @@ from app.agents.planning_assistant import (
     get_planning_assistant,
 )
 
+from app.agents.unified_orchestrator import (
+    UnifiedOrchestrator,
+    OrchestratorResponse,
+    get_unified_orchestrator,
+)
+
+from app.agents.enrichers import (
+    BaseEnricher,
+    EnricherRegistry,
+    EnrichmentResult,
+    get_enricher_registry,
+    register_all_enrichers,
+    TaskEnricher,
+    FinanceEnricher,
+    FitnessEnricher,
+    ProjectEnricher,
+    PlanningEnricher,
+)
+
 
 __all__ = [
     # Base
     "setup_dspy",
     "MessageClassifier",
     "TaskExtractor",
-    "ComplexityAnalyzer",
-    "SpendingSignature",
-    "GenerateMorningPlan",
-    "AnalyzeNutrition",
     # Inbox Processor
     "InboxProcessorAgent",
     "MessageCategory",
@@ -162,11 +160,6 @@ __all__ = [
     "Exercise",
     "ExerciseSet",
     "WorkoutResult",
-    # Jira Helper
-    "JiraHelperAgent",
-    "JiraContentResult",
-    "UserStoryResult",
-    "quick_jira_update",
     # Debt Strategist
     "DebtStrategistAgent",
     "Debt",
@@ -206,14 +199,25 @@ __all__ = [
     "PendingAction",
     "EntityType",
     "get_conversation_store",
-    # Conversational Orchestrator
-    "ConversationalOrchestrator",
-    "ConversationalResponse",
-    "get_conversational_orchestrator",
     # Planning Assistant
     "PlanningAssistant",
     "TomorrowPlan",
     "PrioritizationResult",
     "RescheduleResult",
     "get_planning_assistant",
+    # Unified Orchestrator
+    "UnifiedOrchestrator",
+    "OrchestratorResponse",
+    "get_unified_orchestrator",
+    # Enrichers
+    "BaseEnricher",
+    "EnricherRegistry",
+    "EnrichmentResult",
+    "get_enricher_registry",
+    "register_all_enrichers",
+    "TaskEnricher",
+    "FinanceEnricher",
+    "FitnessEnricher",
+    "ProjectEnricher",
+    "PlanningEnricher",
 ]
