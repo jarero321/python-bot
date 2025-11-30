@@ -1,0 +1,182 @@
+{
+  "5428441975": {
+    "user_id": 5428441975,
+    "state": "idle",
+    "history": [
+      {
+        "role": "user",
+        "content": "Que recordatorios tengo?",
+        "timestamp": "2025-11-30T10:50:31.214886",
+        "intent": "reminder_query",
+        "entities": {}
+      },
+      {
+        "role": "assistant",
+        "content": "Entendido: reminder_query. Procesando...",
+        "timestamp": "2025-11-30T10:50:32.192350",
+        "intent": null,
+        "entities": {}
+      },
+      {
+        "role": "user",
+        "content": "Te puedo pedir que crees un recordatorio",
+        "timestamp": "2025-11-30T10:50:57.572215",
+        "intent": "reminder_create",
+        "entities": {}
+      },
+      {
+        "role": "assistant",
+        "content": "Entendido: reminder_create. Procesando...",
+        "timestamp": "2025-11-30T10:50:58.597085",
+        "intent": null,
+        "entities": {}
+      },
+      {
+        "role": "user",
+        "content": "El recordatorio se llamará llamar a Carla en 5 minutos",
+        "timestamp": "2025-11-30T10:51:23.674019",
+        "intent": "reminder_create",
+        "entities": {
+          "name": "llamar a Carla",
+          "time": "en 5 minutos"
+        }
+      },
+      {
+        "role": "assistant",
+        "content": "Entendido: reminder_create. Procesando...",
+        "timestamp": "2025-11-30T10:51:24.921634",
+        "intent": null,
+        "entities": {}
+      },
+      {
+        "role": "user",
+        "content": "Que tareas tengo?",
+        "timestamp": "2025-11-30T10:53:04.639286",
+        "intent": "task_query",
+        "entities": {
+          "task": "tareas"
+        }
+      },
+      {
+        "role": "assistant",
+        "content": "Entendido: task_query. Procesando...",
+        "timestamp": "2025-11-30T10:53:06.786928",
+        "intent": null,
+        "entities": {}
+      },
+      {
+        "role": "user",
+        "content": "Hola buenos días que tareas tengo para hoy?",
+        "timestamp": "2025-11-30T10:53:09.238211",
+        "intent": "task_query",
+        "entities": {
+          "date": "hoy"
+        }
+      },
+      {
+        "role": "assistant",
+        "content": "Entendido: task_query. Procesando...",
+        "timestamp": "2025-11-30T10:53:10.318178",
+        "intent": null,
+        "entities": {}
+      },
+      {
+        "role": "user",
+        "content": "Hola buenos días crea un proyecto llamado Franco Freelance Script power Automate",
+        "timestamp": "2025-11-30T10:53:57.186328",
+        "intent": "project_create",
+        "entities": {
+          "project_name": "Franco Freelance Script power Automate"
+        }
+      },
+      {
+        "role": "assistant",
+        "content": "Proyecto: <b>Franco Freelance Script power Automate</b>\n¿Qué tipo de proyecto es?",
+        "timestamp": "2025-11-30T10:54:03.771102",
+        "intent": null,
+        "entities": {}
+      },
+      {
+        "role": "user",
+        "content": "Puedes crearme un recordatorio de comer",
+        "timestamp": "2025-11-30T10:55:15.132399",
+        "intent": "reminder_create",
+        "entities": {
+          "reminder": "comer"
+        }
+      },
+      {
+        "role": "assistant",
+        "content": "Entendido: reminder_create. Procesando...",
+        "timestamp": "2025-11-30T10:55:17.681059",
+        "intent": null,
+        "entities": {}
+      },
+      {
+        "role": "user",
+        "content": "Para hoy",
+        "timestamp": "2025-11-30T10:56:46.187714",
+        "intent": "reminder_query",
+        "entities": {
+          "date": "hoy"
+        }
+      },
+      {
+        "role": "assistant",
+        "content": "Entendido: reminder_query. Procesando...",
+        "timestamp": "2025-11-30T10:56:49.964521",
+        "intent": null,
+        "entities": {}
+      },
+      {
+        "role": "user",
+        "content": "Hola buenos días",
+        "timestamp": "2025-11-30T10:58:17.483092",
+        "intent": "greeting",
+        "entities": {}
+      },
+      {
+        "role": "assistant",
+        "content": "¡Hola! ¿En qué puedo ayudarte hoy?",
+        "timestamp": "2025-11-30T10:58:19.898407",
+        "intent": null,
+        "entities": {}
+      },
+      {
+        "role": "user",
+        "content": "Puedes crear un recordatorio en 5 minutos? Para comer",
+        "timestamp": "2025-11-30T10:58:27.850453",
+        "intent": "reminder_create",
+        "entities": {
+          "time": "5 minutos",
+          "task": "comer"
+        }
+      },
+      {
+        "role": "assistant",
+        "content": "Entendido: reminder_create. Procesando...",
+        "timestamp": "2025-11-30T10:58:28.878146",
+        "intent": null,
+        "entities": {}
+      }
+    ],
+    "active_entity": {
+      "entity_type": "project",
+      "entity_id": null,
+      "entity_name": "Franco Freelance Script power Automate",
+      "entity_data": {
+        "project_name": "Franco Freelance Script power Automate",
+        "suggested_type": "🏠 Personal",
+        "genera_dinero": false,
+        "en_rotacion_estudio": false
+      },
+      "subtasks": [],
+      "suggested_subtasks": [],
+      "blockers": [],
+      "created_at": "2025-11-30T10:54:03.771086"
+    },
+    "pending_action": null,
+    "last_intent": "reminder_create",
+    "last_activity": "2025-11-30T10:58:28.878150"
+  }
+}

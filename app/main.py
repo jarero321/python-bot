@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.telegram_webhook import router as telegram_router
+from app.api.admin import router as admin_router
 from app.config import get_settings
 from app.utils.errors import CarlosCommandError, ErrorCategory, log_error
 
@@ -48,13 +49,54 @@ async def lifespan(app: FastAPI):
     logger.info(f"Entorno: {settings.app_env}")
     logger.info(f"Debug: {settings.debug}")
 
-    # Inicializar Core (LLM + Handlers + RAG opcional)
+    # Inicializar Core (LLM + Handlers + RAG)
     from app.core import initialize_core
 
-    # RAG deshabilitado por defecto para arranque rápido
-    # Habilitar con: await initialize_core(include_rag=True)
-    await initialize_core(include_rag=False)
-    logger.info("Core inicializado (LLM + Handlers)")
+    # RAG habilitado para búsqueda semántica y detección de duplicados
+    await initialize_core(include_rag=True)
+    logger.info("Core inicializado (LLM + Handlers + RAG)")
+
+    # Inicializar Domain Services (TaskService, ProjectService)
+    from app.domain.services import get_task_service, get_project_service
+
+    task_service = get_task_service()
+    await task_service.initialize()
+    logger.info("TaskService inicializado con RAG")
+
+    project_service = get_project_service()
+    await project_service.initialize()
+    logger.info("ProjectService inicializado")
+
+    # Indexación automática de tareas y proyectos existentes
+    try:
+        from app.core.rag import get_vector_store, get_retriever
+
+        vector_store = get_vector_store()
+        retriever = get_retriever()
+
+        # Solo reindexar si el índice está vacío
+        if vector_store.count == 0:
+            logger.info("Índice RAG vacío, iniciando indexación automática...")
+
+            # Indexar tareas pendientes
+            tasks_count = await task_service.reindex_all()
+            logger.info(f"Indexadas {tasks_count} tareas")
+
+            # Indexar proyectos activos
+            projects = await project_service.get_active()
+            for project in projects:
+                try:
+                    await retriever.index_project(project)
+                except Exception as e:
+                    logger.warning(f"Error indexando proyecto {project.name}: {e}")
+            logger.info(f"Indexados {len(projects)} proyectos")
+
+            logger.info(f"Indexación automática completada: {vector_store.count} documentos")
+        else:
+            logger.info(f"Índice RAG existente: {vector_store.count} documentos")
+
+    except Exception as e:
+        logger.warning(f"Error en indexación automática (no crítico): {e}")
 
     # Inicializar base de datos
     from app.db.database import init_db, close_db
@@ -68,7 +110,23 @@ async def lifespan(app: FastAPI):
     await setup_scheduler()
     logger.info("Scheduler inicializado")
 
+    # Inicializar Telegram Bot Application
+    from telegram.ext import Application
+    from app.bot.handlers import setup_handlers
+
+    telegram_app = (
+        Application.builder()
+        .token(settings.telegram_bot_token)
+        .build()
+    )
+    setup_handlers(telegram_app)
+    await telegram_app.initialize()
+    logger.info("Telegram Bot inicializado")
+
     yield
+
+    # Shutdown Telegram
+    await telegram_app.shutdown()
 
     # Detener scheduler
     await shutdown_scheduler()
@@ -99,6 +157,7 @@ app.add_middleware(
 
 # Routers
 app.include_router(telegram_router)
+app.include_router(admin_router)
 
 
 # Middleware de manejo global de errores
@@ -200,6 +259,20 @@ async def health_check_detailed():
         }
     except Exception as e:
         health["checks"]["cache"] = {
+            "status": "unhealthy",
+            "error": str(e),
+        }
+
+    # Check RAG / Vector Store
+    try:
+        from app.core.rag import get_vector_store
+        vector_store = get_vector_store()
+        health["checks"]["rag"] = {
+            "status": "healthy",
+            "documents_indexed": vector_store.count,
+        }
+    except Exception as e:
+        health["checks"]["rag"] = {
             "status": "unhealthy",
             "error": str(e),
         }

@@ -20,6 +20,7 @@ class UserIntent(str, Enum):
     TASK_UPDATE = "task_update"      # Actualizar tarea existente
     TASK_DELETE = "task_delete"      # Eliminar/completar tarea
     TASK_QUERY = "task_query"        # Preguntar sobre tareas
+    TASK_STATUS_CHANGE = "task_status_change"  # Cambiar estado de tarea
 
     # Ideas y captura
     IDEA = "idea"                    # Capturar una idea
@@ -207,6 +208,8 @@ class IntentRouterAgent(BaseAgent):
             "task delete": UserIntent.TASK_DELETE,
             "task_query": UserIntent.TASK_QUERY,
             "task query": UserIntent.TASK_QUERY,
+            "task_status_change": UserIntent.TASK_STATUS_CHANGE,
+            "task status change": UserIntent.TASK_STATUS_CHANGE,
             # Ideas y notas
             "idea": UserIntent.IDEA,
             "note": UserIntent.NOTE,

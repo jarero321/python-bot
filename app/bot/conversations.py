@@ -93,7 +93,7 @@ async def start_inbox_capture(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         # Clasificar con InboxProcessor
         agent = InboxProcessorAgent()
-        result = await agent.classify_message(text)
+        result = await agent.execute(text)
 
         user_data["classification"] = result
 
@@ -1165,13 +1165,10 @@ def get_days_until_payday() -> int:
 
 
 def get_inbox_conversation_handler() -> ConversationHandler:
-    """Crea el ConversationHandler para captura rápida."""
+    """Crea el ConversationHandler para captura rápida (solo via /inbox)."""
     return ConversationHandler(
         entry_points=[
-            MessageHandler(
-                filters.TEXT & ~filters.COMMAND & ~filters.Regex(r'^\$'),
-                start_inbox_capture,
-            ),
+            CommandHandler("inbox", start_inbox_capture),
         ],
         states={
             InboxStates.WAITING_CLASSIFICATION: [

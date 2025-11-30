@@ -2,6 +2,7 @@
 Project Handlers - Proyectos y estudio.
 
 Handlers para CRUD de proyectos y sesiones de estudio.
+Usan repositorios del dominio en lugar de NotionService directamente.
 """
 
 import re
@@ -18,24 +19,27 @@ from app.core.routing import (
     HandlerResponse,
     intent_handler,
 )
-from app.services.notion import get_notion_service
+from app.domain.repositories import get_project_repository, IProjectRepository
+from app.domain.entities.project import Project, ProjectType, ProjectStatus
 
 logger = logging.getLogger(__name__)
 
+
+# ==================== Helpers ====================
 
 def project_type_keyboard() -> InlineKeyboardMarkup:
     """Teclado para seleccionar tipo de proyecto."""
     keyboard = [
         [
-            InlineKeyboardButton("💼 Trabajo", callback_data="project_type_trabajo"),
-            InlineKeyboardButton("💰 Freelance", callback_data="project_type_freelance"),
+            InlineKeyboardButton("💼 Trabajo", callback_data="project_type:work"),
+            InlineKeyboardButton("💰 Freelance", callback_data="project_type:freelance"),
         ],
         [
-            InlineKeyboardButton("🏠 Personal", callback_data="project_type_personal"),
-            InlineKeyboardButton("📚 Estudio", callback_data="project_type_estudio"),
+            InlineKeyboardButton("🏠 Personal", callback_data="project_type:personal"),
+            InlineKeyboardButton("📚 Estudio", callback_data="project_type:learning"),
         ],
         [
-            InlineKeyboardButton("🚀 Side Project", callback_data="project_type_side_project"),
+            InlineKeyboardButton("🚀 Side Project", callback_data="project_type:side_project"),
         ],
         [
             InlineKeyboardButton("❌ Cancelar", callback_data="project_cancel"),
@@ -45,13 +49,72 @@ def project_type_keyboard() -> InlineKeyboardMarkup:
 
 
 PROJECT_TYPE_LABELS = {
-    "trabajo": "💼 Trabajo",
-    "freelance": "💰 Freelance",
-    "personal": "🏠 Personal",
-    "estudio": "📚 Estudio/Aprendizaje",
-    "side_project": "🚀 Side Project",
+    ProjectType.WORK: "💼 Trabajo",
+    ProjectType.FREELANCE: "💰 Freelance",
+    ProjectType.PERSONAL: "🏠 Personal",
+    ProjectType.LEARNING: "📚 Estudio/Aprendizaje",
+    ProjectType.SIDE_PROJECT: "🚀 Side Project",
+    ProjectType.HOBBY: "🎯 Hobby",
+    ProjectType.FINANCIAL: "💳 Financiero",
+    ProjectType.SEARCH: "🔍 Búsqueda",
 }
 
+PROJECT_STATUS_LABELS = {
+    ProjectStatus.IDEA: "💡 Idea",
+    ProjectStatus.PLANNING: "📝 Planificando",
+    ProjectStatus.ACTIVE: "🟢 Activo",
+    ProjectStatus.WAITING: "🟡 Esperando",
+    ProjectStatus.PAUSED: "⏸️ Pausado",
+    ProjectStatus.COMPLETED: "✅ Completado",
+    ProjectStatus.CANCELLED: "❌ Cancelado",
+}
+
+
+def format_project_line(project: Project) -> str:
+    """Formatea un proyecto para mostrar en lista."""
+    type_emoji = PROJECT_TYPE_LABELS.get(project.type, "📁").split()[0]
+
+    # Barra de progreso
+    filled = int(project.progress / 10)
+    bar = "▓" * filled + "░" * (10 - filled)
+
+    overdue = " ⚠️" if project.is_overdue else ""
+
+    return f"{type_emoji} <b>{project.name}</b>{overdue}\n   {bar} {project.progress}%"
+
+
+def format_project_detail(project: Project) -> str:
+    """Formatea detalles completos de un proyecto."""
+    lines = [f"<b>{project.name}</b>"]
+
+    lines.append(f"Tipo: {PROJECT_TYPE_LABELS.get(project.type, project.type.value)}")
+    lines.append(f"Estado: {PROJECT_STATUS_LABELS.get(project.status, project.status.value)}")
+
+    # Barra de progreso
+    filled = int(project.progress / 10)
+    bar = "▓" * filled + "░" * (10 - filled)
+    lines.append(f"Progreso: {bar} {project.progress}%")
+
+    if project.description:
+        lines.append(f"\n📝 {project.description[:100]}")
+
+    if project.target_date:
+        days = project.days_until_target
+        if days is not None:
+            if days < 0:
+                lines.append(f"\n⚠️ Vencido hace {abs(days)} días")
+            elif days == 0:
+                lines.append("\n📅 Target: Hoy")
+            else:
+                lines.append(f"\n📅 Target en {days} días")
+
+    if project.total_tasks > 0:
+        lines.append(f"📋 {project.completed_tasks}/{project.total_tasks} tareas")
+
+    return "\n".join(lines)
+
+
+# ==================== Handlers ====================
 
 @intent_handler(UserIntent.PROJECT_CREATE)
 class ProjectCreateHandler(BaseIntentHandler):
@@ -59,6 +122,10 @@ class ProjectCreateHandler(BaseIntentHandler):
 
     name = "ProjectCreateHandler"
     intents = [UserIntent.PROJECT_CREATE]
+
+    def __init__(self, project_repo: IProjectRepository | None = None):
+        super().__init__()
+        self._project_repo = project_repo or get_project_repository()
 
     async def handle(
         self,
@@ -71,7 +138,7 @@ class ProjectCreateHandler(BaseIntentHandler):
         confidence = getattr(intent_result, "confidence", 0.5)
 
         project_name = entities.get("project_name", "")
-        project_type = entities.get("project_type", "")
+        project_type_str = entities.get("project_type", "")
 
         if not project_name:
             # Limpiar prefijos comunes
@@ -83,14 +150,29 @@ class ProjectCreateHandler(BaseIntentHandler):
             ).strip()
             project_name = cleaned[:50] if cleaned else text[:50]
 
+        # Mapear tipo de string a enum
+        type_mapping = {
+            "trabajo": ProjectType.WORK,
+            "work": ProjectType.WORK,
+            "freelance": ProjectType.FREELANCE,
+            "personal": ProjectType.PERSONAL,
+            "estudio": ProjectType.LEARNING,
+            "learning": ProjectType.LEARNING,
+            "side_project": ProjectType.SIDE_PROJECT,
+            "hobby": ProjectType.HOBBY,
+        }
+        project_type = type_mapping.get(project_type_str.lower()) if project_type_str else None
+
         # Guardar en context
-        context.user_data["pending_project_name"] = project_name
-        context.user_data["pending_project_type"] = project_type
+        context.user_data["pending_project"] = {
+            "name": project_name,
+            "type": project_type.value if project_type else None,
+        }
 
         if project_type:
             # Mostrar confirmación directa
             keyboard = confirm_keyboard(
-                confirm_data="project_create",
+                confirm_data="project_create_confirm",
                 cancel_data="project_cancel",
                 confirm_text="✅ Crear proyecto",
                 cancel_text="❌ Cancelar",
@@ -99,7 +181,7 @@ class ProjectCreateHandler(BaseIntentHandler):
             message = (
                 f"📁 <b>Nuevo Proyecto</b>\n\n"
                 f"<b>Nombre:</b> {project_name}\n"
-                f"<b>Tipo detectado:</b> {PROJECT_TYPE_LABELS.get(project_type, project_type)}\n"
+                f"<b>Tipo:</b> {PROJECT_TYPE_LABELS.get(project_type, project_type.value)}\n"
                 f"<b>Confianza:</b> {confidence:.0%}\n\n"
                 f"¿Confirmar creación?"
             )
@@ -127,14 +209,18 @@ class ProjectQueryHandler(BaseIntentHandler):
     name = "ProjectQueryHandler"
     intents = [UserIntent.PROJECT_QUERY]
 
+    def __init__(self, project_repo: IProjectRepository | None = None):
+        super().__init__()
+        self._project_repo = project_repo or get_project_repository()
+
     async def handle(
         self,
         update: Update,
         context: ContextTypes.DEFAULT_TYPE,
         intent_result: Any,
     ) -> HandlerResponse:
-        notion = get_notion_service()
-        projects = await notion.get_projects(active_only=True)
+        # Obtener proyectos activos usando el repositorio
+        projects = await self._project_repo.get_active()
 
         if not projects:
             return HandlerResponse(
@@ -148,31 +234,12 @@ class ProjectQueryHandler(BaseIntentHandler):
         msg = "📁 <b>Proyectos Activos</b>\n\n"
 
         for project in projects[:10]:
-            props = project.get("properties", {})
-            title_prop = props.get("Proyecto", {}).get("title", [])
-            title = (
-                title_prop[0].get("text", {}).get("content", "Sin nombre")
-                if title_prop
-                else "Sin nombre"
-            )
+            msg += format_project_line(project) + "\n\n"
 
-            tipo = props.get("Tipo", {}).get("select", {}).get("name", "")
-            progreso = props.get("Progreso", {}).get("number", 0) or 0
-
-            tipo_emoji = {
-                "Trabajo": "💼",
-                "Freelance": "💰",
-                "Personal": "🏠",
-                "Estudio": "📚",
-                "Side Project": "🚀",
-            }.get(tipo, "📁")
-
-            # Barra de progreso
-            filled = int(progreso / 10)
-            bar = "▓" * filled + "░" * (10 - filled)
-
-            msg += f"{tipo_emoji} <b>{title}</b>\n"
-            msg += f"   {bar} {progreso}%\n\n"
+        # Resumen
+        total = len(projects)
+        avg_progress = sum(p.progress for p in projects) / total if total > 0 else 0
+        msg += f"📊 {total} proyectos | Progreso promedio: {avg_progress:.0f}%"
 
         return HandlerResponse(message=msg)
 
@@ -184,6 +251,10 @@ class ProjectUpdateHandler(BaseIntentHandler):
     name = "ProjectUpdateHandler"
     intents = [UserIntent.PROJECT_UPDATE]
 
+    def __init__(self, project_repo: IProjectRepository | None = None):
+        super().__init__()
+        self._project_repo = project_repo or get_project_repository()
+
     async def handle(
         self,
         update: Update,
@@ -194,34 +265,17 @@ class ProjectUpdateHandler(BaseIntentHandler):
         text = self.get_raw_message(intent_result)
 
         project_name = entities.get("project_name", text)
-        notion = get_notion_service()
 
-        projects = await notion.get_projects(active_only=True)
-        matching_projects = []
+        # Buscar proyectos usando el repositorio
+        projects = await self._project_repo.search_by_name(project_name)
 
-        for project in projects:
-            props = project.get("properties", {})
-            title_prop = props.get("Proyecto", {}).get("title", [])
-            title = (
-                title_prop[0].get("text", {}).get("content", "")
-                if title_prop
-                else ""
-            )
-
-            if project_name.lower() in title.lower() or title.lower() in project_name.lower():
-                matching_projects.append({
-                    "id": project.get("id"),
-                    "title": title,
-                })
-
-        if matching_projects:
+        if projects:
             keyboard = []
-            for proj in matching_projects[:5]:
-                short_id = proj["id"][:8]
+            for proj in projects[:5]:
                 keyboard.append([
                     InlineKeyboardButton(
-                        f"✏️ {proj['title'][:30]}",
-                        callback_data=f"project_edit:{short_id}",
+                        f"✏️ {proj.name[:30]}",
+                        callback_data=f"project_edit:{proj.id}",
                     ),
                 ])
             keyboard.append([
@@ -231,7 +285,9 @@ class ProjectUpdateHandler(BaseIntentHandler):
                 ),
             ])
 
-            context.user_data["pending_edit_projects"] = matching_projects
+            context.user_data["pending_edit_projects"] = [
+                {"id": p.id, "name": p.name} for p in projects
+            ]
 
             return HandlerResponse(
                 message=(
@@ -257,6 +313,10 @@ class ProjectDeleteHandler(BaseIntentHandler):
     name = "ProjectDeleteHandler"
     intents = [UserIntent.PROJECT_DELETE]
 
+    def __init__(self, project_repo: IProjectRepository | None = None):
+        super().__init__()
+        self._project_repo = project_repo or get_project_repository()
+
     async def handle(
         self,
         update: Update,
@@ -267,40 +327,23 @@ class ProjectDeleteHandler(BaseIntentHandler):
         text = self.get_raw_message(intent_result)
 
         project_name = entities.get("project_name", text)
-        notion = get_notion_service()
 
-        projects = await notion.get_projects(active_only=True)
-        matching_projects = []
+        # Buscar proyectos usando el repositorio
+        projects = await self._project_repo.search_by_name(project_name)
 
-        for project in projects:
-            props = project.get("properties", {})
-            title_prop = props.get("Proyecto", {}).get("title", [])
-            title = (
-                title_prop[0].get("text", {}).get("content", "")
-                if title_prop
-                else ""
-            )
-
-            if project_name.lower() in title.lower():
-                matching_projects.append({
-                    "id": project.get("id"),
-                    "title": title,
-                })
-
-        if matching_projects:
+        if projects:
             keyboard = []
-            for proj in matching_projects[:5]:
-                short_id = proj["id"][:8]
+            for proj in projects[:5]:
                 keyboard.append([
                     InlineKeyboardButton(
-                        f"🏁 Completar {proj['title'][:25]}",
-                        callback_data=f"project_complete:{short_id}",
+                        f"🏁 Completar {proj.name[:25]}",
+                        callback_data=f"project_complete:{proj.id}",
                     ),
                 ])
                 keyboard.append([
                     InlineKeyboardButton(
-                        f"❌ Cancelar {proj['title'][:25]}",
-                        callback_data=f"project_cancel_proj:{short_id}",
+                        f"❌ Cancelar {proj.name[:25]}",
+                        callback_data=f"project_cancel_proj:{proj.id}",
                     ),
                 ])
             keyboard.append([
@@ -332,6 +375,10 @@ class StudySessionHandler(BaseIntentHandler):
 
     name = "StudySessionHandler"
     intents = [UserIntent.STUDY_SESSION]
+
+    def __init__(self, project_repo: IProjectRepository | None = None):
+        super().__init__()
+        self._project_repo = project_repo or get_project_repository()
 
     async def handle(
         self,

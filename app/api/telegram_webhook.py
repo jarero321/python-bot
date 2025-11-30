@@ -20,7 +20,12 @@ async def telegram_webhook(request: Request):
         print(f"[WEBHOOK] Update recibido: {data}")
         logger.info(f"Update recibido: {data}")
 
-        application = await get_application()
+        application = get_application()
+
+        if application is None:
+            logger.error("Application no inicializada")
+            return {"status": "error", "message": "Bot not initialized"}
+
         update = Update.de_json(data, application.bot)
 
         print(f"[WEBHOOK] Procesando update...")

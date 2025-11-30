@@ -2,6 +2,7 @@
 Planning Handlers - Planificación y recordatorios.
 
 Handlers para planificar el día/semana, priorizar tareas, y recordatorios.
+Usan repositorios del dominio en lugar de NotionService directamente.
 """
 
 import logging
@@ -16,11 +17,28 @@ from app.core.routing import (
     HandlerResponse,
     intent_handler,
 )
-from app.core.llm import get_llm_provider, ModelType
-from app.services.notion import get_notion_service
+from app.core.llm import get_llm_provider
+from app.domain.repositories import get_task_repository, ITaskRepository
+from app.domain.entities.task import Task, TaskStatus, TaskPriority
 
 logger = logging.getLogger(__name__)
 
+
+# ==================== Helpers ====================
+
+def format_task_for_plan(task: Task) -> str:
+    """Formatea una tarea para planes."""
+    priority_icon = {
+        TaskPriority.URGENT: "🔥",
+        TaskPriority.HIGH: "⚡",
+        TaskPriority.NORMAL: "📌",
+        TaskPriority.LOW: "🧊",
+    }.get(task.priority, "📌")
+
+    return f"{priority_icon} {task.title}"
+
+
+# ==================== Handlers ====================
 
 @intent_handler(UserIntent.PLAN_TOMORROW)
 class PlanTomorrowHandler(BaseIntentHandler):
@@ -28,6 +46,10 @@ class PlanTomorrowHandler(BaseIntentHandler):
 
     name = "PlanTomorrowHandler"
     intents = [UserIntent.PLAN_TOMORROW]
+
+    def __init__(self, task_repo: ITaskRepository | None = None):
+        super().__init__()
+        self._task_repo = task_repo or get_task_repository()
 
     async def handle(
         self,
@@ -130,6 +152,10 @@ class PlanWeekHandler(BaseIntentHandler):
     name = "PlanWeekHandler"
     intents = [UserIntent.PLAN_WEEK]
 
+    def __init__(self, task_repo: ITaskRepository | None = None):
+        super().__init__()
+        self._task_repo = task_repo or get_task_repository()
+
     async def handle(
         self,
         update: Update,
@@ -200,17 +226,19 @@ class WorkloadCheckHandler(BaseIntentHandler):
     name = "WorkloadCheckHandler"
     intents = [UserIntent.WORKLOAD_CHECK]
 
+    def __init__(self, task_repo: ITaskRepository | None = None):
+        super().__init__()
+        self._task_repo = task_repo or get_task_repository()
+
     async def handle(
         self,
         update: Update,
         context: ContextTypes.DEFAULT_TYPE,
         intent_result: Any,
     ) -> HandlerResponse:
-        from app.agents.orchestrator import get_orchestrator
-
         try:
-            orchestrator = get_orchestrator()
-            summary = await orchestrator.get_workload_summary()
+            # Usar repositorio directamente
+            summary = await self._task_repo.get_workload_summary()
 
             total = summary.get("total_pending", 0)
             overdue = summary.get("overdue", 0)
@@ -223,9 +251,10 @@ class WorkloadCheckHandler(BaseIntentHandler):
                 response += f"⚠️ <b>Vencidas:</b> {overdue}\n"
 
             response += f"\n<b>Por prioridad:</b>\n"
-            response += f"🔥 Urgente: {prio.get('urgente', 0)}\n"
-            response += f"⚡ Alta: {prio.get('alta', 0)}\n"
+            response += f"🔥 Urgente: {prio.get('urgent', 0)}\n"
+            response += f"⚡ Alta: {prio.get('high', 0)}\n"
             response += f"📌 Normal: {prio.get('normal', 0)}\n"
+            response += f"🧊 Baja: {prio.get('low', 0)}\n"
 
             # Deadlines de la semana
             deadlines = summary.get("deadlines_this_week", [])
@@ -251,26 +280,37 @@ class PrioritizeHandler(BaseIntentHandler):
     name = "PrioritizeHandler"
     intents = [UserIntent.PRIORITIZE]
 
+    def __init__(self, task_repo: ITaskRepository | None = None):
+        super().__init__()
+        self._task_repo = task_repo or get_task_repository()
+
     async def handle(
         self,
         update: Update,
         context: ContextTypes.DEFAULT_TYPE,
         intent_result: Any,
     ) -> HandlerResponse:
-        keyboard = InlineKeyboardMarkup([
-            [
+        # Obtener tareas urgentes para mostrar
+        urgent_tasks = await self._task_repo.get_by_priority(TaskPriority.URGENT)
+
+        keyboard_rows = []
+
+        if urgent_tasks:
+            keyboard_rows.append([
                 InlineKeyboardButton(
-                    "📋 Ver tareas urgentes",
+                    f"🔥 Ver {len(urgent_tasks)} urgentes",
                     callback_data="show_urgent_tasks",
                 ),
-            ],
-            [
-                InlineKeyboardButton(
-                    "📊 Ver mi carga",
-                    callback_data="workload_check",
-                ),
-            ],
+            ])
+
+        keyboard_rows.append([
+            InlineKeyboardButton(
+                "📊 Ver mi carga",
+                callback_data="workload_check",
+            ),
         ])
+
+        keyboard = InlineKeyboardMarkup(keyboard_rows)
 
         message = (
             "🤔 <b>Ayuda para priorizar</b>\n\n"
@@ -291,6 +331,10 @@ class RescheduleHandler(BaseIntentHandler):
 
     name = "RescheduleHandler"
     intents = [UserIntent.RESCHEDULE]
+
+    def __init__(self, task_repo: ITaskRepository | None = None):
+        super().__init__()
+        self._task_repo = task_repo or get_task_repository()
 
     async def handle(
         self,
@@ -320,30 +364,21 @@ class RescheduleHandler(BaseIntentHandler):
                 keyboard=keyboard,
             )
 
-        # Buscar la tarea
-        notion = get_notion_service()
-        tasks = await notion.get_pending_tasks(limit=15)
+        # Buscar la tarea usando repositorio
+        tasks = await self._task_repo.get_pending(limit=15)
 
         matching = []
         for task in tasks:
-            props = task.get("properties", {})
-            title_prop = props.get("Tarea", {}).get("title", [])
-            title = (
-                title_prop[0].get("text", {}).get("content", "")
-                if title_prop
-                else ""
-            )
-            if task_name.lower() in title.lower():
-                matching.append({"id": task["id"], "title": title})
+            if task_name.lower() in task.title.lower():
+                matching.append(task)
 
         if matching:
             keyboard = []
             for task in matching[:5]:
-                short_id = task["id"][:8]
                 keyboard.append([
                     InlineKeyboardButton(
-                        f"📅 {task['title'][:30]}",
-                        callback_data=f"reschedule_task:{short_id}",
+                        f"📅 {task.title[:30]}",
+                        callback_data=f"reschedule_task:{task.id}",
                     ),
                 ])
             keyboard.append([
@@ -466,10 +501,54 @@ class ReminderQueryHandler(BaseIntentHandler):
         context: ContextTypes.DEFAULT_TYPE,
         intent_result: Any,
     ) -> HandlerResponse:
-        # TODO: Integrar con ReminderService para listar recordatorios
-        return HandlerResponse(
-            message=(
-                "⏰ <b>Tus Recordatorios</b>\n\n"
-                "(Funcionalidad de listar recordatorios próximamente)"
+        from app.services.reminder_service import get_reminder_service
+        from datetime import datetime
+
+        chat_id = str(update.effective_chat.id)
+        service = get_reminder_service()
+
+        # Obtener recordatorios próximos (24 horas)
+        upcoming = await service.get_upcoming_reminders(chat_id, hours=24)
+
+        # Obtener todos los pendientes
+        all_pending = await service.get_pending_reminders(chat_id=chat_id)
+
+        if not upcoming and not all_pending:
+            return HandlerResponse(
+                message=(
+                    "⏰ <b>Tus Recordatorios</b>\n\n"
+                    "No tienes recordatorios pendientes.\n\n"
+                    "💡 Crea uno con:\n"
+                    "<i>\"Recuérdame llamar al doctor mañana a las 10\"</i>"
+                )
             )
-        )
+
+        message = "⏰ <b>Tus Recordatorios</b>\n\n"
+
+        if upcoming:
+            message += "<b>📍 Próximas 24 horas:</b>\n"
+            for reminder in upcoming[:5]:
+                time_str = reminder.scheduled_at.strftime("%H:%M")
+                date_str = reminder.scheduled_at.strftime("%d/%m")
+                priority_emoji = {
+                    "urgent": "🔥",
+                    "high": "⚡",
+                    "normal": "📌",
+                    "low": "📎",
+                }.get(reminder.priority.value, "📌")
+
+                status_emoji = ""
+                if reminder.status.value == "snoozed":
+                    status_emoji = " (⏸️ pospuesto)"
+
+                message += f"{priority_emoji} {time_str} - {reminder.title}{status_emoji}\n"
+            message += "\n"
+
+        # Mostrar otros pendientes (no en las próximas 24h)
+        other_pending = [r for r in all_pending if r not in upcoming]
+        if other_pending:
+            message += f"<b>📅 Más adelante:</b> {len(other_pending)} recordatorio(s)\n"
+
+        message += f"\n📊 Total pendientes: {len(all_pending)}"
+
+        return HandlerResponse(message=message)

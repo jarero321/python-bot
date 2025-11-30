@@ -88,11 +88,15 @@ fi
 echo ""
 
 # Verificar si es primera vez o se pide rebuild
-if [ "$1" = "--rebuild" ] || [ ! "$(docker images -q carlos-command-app 2> /dev/null)" ]; then
-    echo "📦 Construyendo imagen..."
+if [ "$1" = "--rebuild" ]; then
+    echo "📦 Reconstruyendo imagen (--no-cache)..."
     $COMPOSE_CMD build --no-cache
+elif [ ! "$(docker images -q carlos-command-app 2> /dev/null)" ]; then
+    echo "📦 Primera vez - Construyendo imagen..."
+    $COMPOSE_CMD build
 else
     echo "📦 Usando imagen existente (usa --rebuild para forzar reconstrucción)"
+    echo "   💡 El código se sincroniza automáticamente via volumen (hot reload)"
 fi
 
 echo ""

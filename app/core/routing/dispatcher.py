@@ -19,6 +19,128 @@ from app.core.routing.registry import (
 logger = logging.getLogger(__name__)
 
 
+async def _handle_custom_reminder_time(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    text: str,
+) -> None:
+    """Procesa la hora personalizada de un recordatorio."""
+    import re
+    from datetime import datetime, timedelta
+    from app.services.reminder_service import get_reminder_service
+
+    pending = context.user_data.get("pending_reminder", {})
+    reminder_text = pending.get("text", "")
+
+    if not reminder_text:
+        context.user_data.pop("awaiting_reminder_time", None)
+        await update.message.reply_text("❌ No hay recordatorio pendiente.")
+        return
+
+    # Parsear hora del mensaje
+    now = datetime.now()
+    scheduled_at = None
+    text_lower = text.lower()
+
+    # Patrones: "en X horas/minutos"
+    match = re.search(r"en\s+(\d+)\s*(hora|horas|h|minuto|minutos|min|m)", text_lower)
+    if match:
+        amount = int(match.group(1))
+        unit = match.group(2)
+        if unit.startswith("h"):
+            scheduled_at = now + timedelta(hours=amount)
+        else:
+            scheduled_at = now + timedelta(minutes=amount)
+
+    # Patrones: "mañana a las X"
+    if not scheduled_at and "mañana" in text_lower:
+        hour_match = re.search(r"(\d{1,2})(?::(\d{2}))?(?:\s*(am|pm))?", text_lower)
+        if hour_match:
+            hour = int(hour_match.group(1))
+            minute = int(hour_match.group(2) or 0)
+            ampm = hour_match.group(3)
+            if ampm == "pm" and hour < 12:
+                hour += 12
+            scheduled_at = (now + timedelta(days=1)).replace(hour=hour, minute=minute, second=0)
+        else:
+            scheduled_at = (now + timedelta(days=1)).replace(hour=9, minute=0, second=0)
+
+    # Patrones: "a las X"
+    if not scheduled_at:
+        hour_match = re.search(r"(?:a\s+las?\s+)?(\d{1,2})(?::(\d{2}))?(?:\s*(am|pm))?", text_lower)
+        if hour_match:
+            hour = int(hour_match.group(1))
+            minute = int(hour_match.group(2) or 0)
+            ampm = hour_match.group(3)
+            if ampm == "pm" and hour < 12:
+                hour += 12
+            scheduled_at = now.replace(hour=hour, minute=minute, second=0)
+            # Si la hora ya pasó, poner para mañana
+            if scheduled_at <= now:
+                scheduled_at += timedelta(days=1)
+
+    # Patrones: días de la semana
+    days = {
+        "lunes": 0, "martes": 1, "miércoles": 2, "miercoles": 2,
+        "jueves": 3, "viernes": 4, "sábado": 5, "sabado": 5, "domingo": 6
+    }
+    for day_name, day_num in days.items():
+        if day_name in text_lower and not scheduled_at:
+            days_ahead = day_num - now.weekday()
+            if days_ahead <= 0:
+                days_ahead += 7
+            scheduled_at = (now + timedelta(days=days_ahead)).replace(hour=9, minute=0, second=0)
+            # Buscar hora específica
+            hour_match = re.search(r"(\d{1,2})(?::(\d{2}))?(?:\s*(am|pm))?", text_lower)
+            if hour_match:
+                hour = int(hour_match.group(1))
+                minute = int(hour_match.group(2) or 0)
+                ampm = hour_match.group(3)
+                if ampm == "pm" and hour < 12:
+                    hour += 12
+                scheduled_at = scheduled_at.replace(hour=hour, minute=minute)
+            break
+
+    if not scheduled_at:
+        await update.message.reply_html(
+            "🤔 No entendí cuándo quieres el recordatorio.\n\n"
+            "Ejemplos:\n"
+            "• \"en 2 horas\"\n"
+            "• \"mañana a las 10\"\n"
+            "• \"el viernes a las 3pm\"\n\n"
+            "Escribe /cancel para cancelar."
+        )
+        return
+
+    # Crear el recordatorio
+    try:
+        chat_id = str(update.effective_chat.id)
+        user_id = str(update.effective_user.id)
+        service = get_reminder_service()
+
+        await service.create_reminder(
+            chat_id=chat_id,
+            user_id=user_id,
+            title=reminder_text,
+            scheduled_at=scheduled_at,
+        )
+
+        time_str = scheduled_at.strftime("%H:%M del %d/%m")
+        await update.message.reply_html(
+            f"✅ <b>Recordatorio creado</b>\n\n"
+            f"<i>{reminder_text}</i>\n\n"
+            f"⏰ Te recordaré: {time_str}"
+        )
+
+        # Limpiar estado
+        context.user_data.pop("pending_reminder", None)
+        context.user_data.pop("awaiting_reminder_time", None)
+
+    except Exception as e:
+        logger.error(f"Error creando recordatorio personalizado: {e}")
+        await update.message.reply_text("❌ Error creando el recordatorio. Intenta de nuevo.")
+
+
 async def dispatch_intent(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -97,6 +219,11 @@ async def handle_message_with_registry(
         user_id = user.id
 
         logger.info(f"Mensaje de {user_id}: {text[:50]}...")
+
+        # Verificar si estamos esperando hora personalizada de recordatorio
+        if context.user_data.get("awaiting_reminder_time"):
+            await _handle_custom_reminder_time(update, context, text)
+            return
 
         # Intentar usar ConversationalOrchestrator primero
         try:
