@@ -48,10 +48,12 @@ async def lifespan(app: FastAPI):
     logger.info(f"Entorno: {settings.app_env}")
     logger.info(f"Debug: {settings.debug}")
 
-    # Inicializar Core (LLM + Handlers)
+    # Inicializar Core (LLM + Handlers + RAG opcional)
     from app.core import initialize_core
 
-    initialize_core()
+    # RAG deshabilitado por defecto para arranque rápido
+    # Habilitar con: await initialize_core(include_rag=True)
+    await initialize_core(include_rag=False)
     logger.info("Core inicializado (LLM + Handlers)")
 
     # Inicializar base de datos

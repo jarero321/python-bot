@@ -349,19 +349,34 @@ handlers.py
 - ✅ Añadidos `parse_date`, `parse_int`, `parse_float`, `parse_bool`
 - ✅ Método `clean_llm_output` para sanitizar respuestas
 
-### Fase 2: ALTO (Semana 2)
+### Fase 2: ALTO ✅ COMPLETADA
 
-#### 2.1 Repository Pattern
-- Crear `ITaskRepository`, `IProjectRepository`
-- Implementar `NotionTaskRepository`
-- Desacoplar agentes de NotionService
+#### 2.1 Repository Pattern ✅
+- ✅ Creadas interfaces `ITaskRepository`, `IProjectRepository`, `IReminderRepository`
+- ✅ Implementado `NotionTaskRepository` con mappers completos
+- ✅ Implementado `NotionProjectRepository`
+- **Archivos creados:**
+  - `app/domain/entities/` - 6 archivos de entidades
+  - `app/domain/repositories/base.py` - Interfaces
+  - `app/domain/repositories/notion_task_repository.py`
+  - `app/domain/repositories/notion_project_repository.py`
 
-#### 2.2 RAG con Embeddings
-- Implementar embedding de tareas
-- Búsqueda semántica para contexto
-- Detección de duplicados
+#### 2.2 RAG con Embeddings ✅
+- ✅ Implementado `EmbeddingProvider` usando Gemini embedding-001
+- ✅ Creado `VectorStore` con persistencia SQLite
+- ✅ Implementado `RAGRetriever` para búsqueda semántica
+- **Archivos creados:**
+  - `app/core/rag/embeddings.py` - Generación de embeddings
+  - `app/core/rag/vector_store.py` - Almacén de vectores
+  - `app/core/rag/retriever.py` - Recuperación de contexto
 
-### Fase 3: Consolidación (Semana 3)
+**Capacidades RAG:**
+- Indexación de tareas y proyectos
+- Búsqueda semántica por similitud
+- Detección de duplicados (threshold configurable)
+- Contexto enriquecido para prompts LLM
+
+### Fase 3: Consolidación (Pendiente)
 
 #### 3.1 Estandarizar Agentes
 - Todos heredan BaseAgent
@@ -560,9 +575,98 @@ date = DSPyParser.parse_date("mañana")  # -> "2024-11-30"
 | Capture | NoteHandler | NOTE |
 | Capture | UnknownHandler | UNKNOWN |
 
-### Próximos Pasos (Fase 2)
+### Próximos Pasos (Fase 3)
 
-1. **Migrar handlers.py a usar dispatch_intent()** - Reemplazar route_by_intent()
-2. **Repository Pattern** - Desacoplar de NotionService
-3. **RAG con Embeddings** - Búsqueda semántica para contexto
-4. **Eliminar código duplicado** - Usar DSPyParser en todos los agentes
+1. **Migrar agentes existentes** - Usar repositorios en lugar de NotionService directo
+2. **Integrar RAG en handlers** - Enriquecer contexto con búsqueda semántica
+3. **Eliminar código duplicado** - Usar DSPyParser en todos los agentes
+4. **Tests unitarios** - Aprovechar el desacoplamiento para testing
+
+---
+
+## 10. Fase 2 - Detalle de Implementación
+
+### Estructura Domain Creada
+
+```
+app/domain/                            # ✅ NUEVO
+├── __init__.py
+├── entities/
+│   ├── __init__.py
+│   ├── task.py                        # Task, TaskFilter, TaskStatus, etc.
+│   ├── project.py                     # Project, ProjectFilter, etc.
+│   ├── reminder.py                    # Reminder entity
+│   ├── inbox.py                       # InboxItem entity
+│   ├── fitness.py                     # WorkoutEntry, NutritionEntry
+│   └── finance.py                     # Transaction, Debt
+└── repositories/
+    ├── __init__.py                    # get_task_repository(), get_project_repository()
+    ├── base.py                        # ITaskRepository, IProjectRepository interfaces
+    ├── notion_task_repository.py      # Implementación Notion
+    └── notion_project_repository.py   # Implementación Notion
+
+app/core/rag/                          # ✅ NUEVO
+├── __init__.py
+├── embeddings.py                      # EmbeddingProvider (Gemini)
+├── vector_store.py                    # VectorStore (SQLite)
+└── retriever.py                       # RAGRetriever
+```
+
+### Uso del Repository Pattern
+
+```python
+# Obtener repositorio (singleton)
+from app.domain.repositories import get_task_repository
+
+repo = get_task_repository()
+
+# CRUD
+task = await repo.get_by_id("abc123")
+task = await repo.create(Task(title="Nueva tarea", ...))
+await repo.update_status(task.id, TaskStatus.DONE)
+
+# Queries
+tasks = await repo.get_for_today()
+tasks = await repo.get_pending(limit=10)
+tasks = await repo.get_by_project(project_id)
+overdue = await repo.get_overdue()
+
+# Aggregates
+summary = await repo.get_workload_summary()
+```
+
+### Uso del Sistema RAG
+
+```python
+from app.core.rag import get_retriever
+
+retriever = get_retriever()
+
+# Indexar tareas
+await retriever.index_task(task)
+await retriever.index_tasks_batch(tasks)
+
+# Buscar similares
+results = await retriever.search_tasks("emails urgentes", limit=5)
+
+# Detectar duplicados antes de crear
+if await retriever.is_duplicate("Revisar emails", threshold=0.85):
+    print("Esta tarea ya existe!")
+
+# Obtener contexto para LLM
+context = await retriever.get_context("planificar semana")
+prompt += context.to_prompt_context()
+```
+
+### Entidades del Dominio
+
+| Entidad | Descripción | Atributos principales |
+|---------|-------------|----------------------|
+| Task | Tarea individual | title, status, priority, due_date, project_id |
+| Project | Proyecto | name, type, status, progress, target_date |
+| Reminder | Recordatorio | message, remind_at, user_id, status |
+| InboxItem | Item sin procesar | content, source, classified_as |
+| WorkoutEntry | Entrada de gym | date, type, exercises, feeling |
+| NutritionEntry | Registro comida | date, meal_type, calories, protein |
+| Transaction | Gasto/Ingreso | date, amount, category, type |
+| Debt | Deuda | name, creditor, current_amount, interest_rate |
