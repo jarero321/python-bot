@@ -17,14 +17,18 @@ async def telegram_webhook(request: Request):
     """Procesa los updates de Telegram via webhook."""
     try:
         data = await request.json()
-        logger.debug(f"Update recibido: {data}")
+        print(f"[WEBHOOK] Update recibido: {data}")
+        logger.info(f"Update recibido: {data}")
 
         application = await get_application()
         update = Update.de_json(data, application.bot)
 
+        print(f"[WEBHOOK] Procesando update...")
         await application.process_update(update)
+        print(f"[WEBHOOK] Update procesado OK")
 
         return {"status": "ok"}
     except Exception as e:
-        logger.error(f"Error procesando webhook: {e}")
+        print(f"[WEBHOOK] ERROR: {e}")
+        logger.exception(f"Error procesando webhook: {e}")
         return {"status": "error", "message": str(e)}

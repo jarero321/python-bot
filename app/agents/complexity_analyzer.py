@@ -6,9 +6,26 @@ from enum import Enum
 
 import dspy
 
-from app.agents.base import get_dspy_lm, ComplexityAnalyzer as ComplexitySignature
+from app.agents.base import setup_dspy
 
 logger = logging.getLogger(__name__)
+
+
+class ComplexitySignature(dspy.Signature):
+    """Analiza la complejidad de una tarea técnica."""
+
+    task_description: str = dspy.InputField(desc="Descripción de la tarea a analizar")
+    user_tech_stack: str = dspy.InputField(desc="Stack tecnológico del usuario")
+    similar_tasks_history: str = dspy.InputField(desc="Historial de tareas similares con tiempos")
+
+    complexity: str = dspy.OutputField(desc="Complejidad: quick, standard, heavy, epic")
+    estimated_minutes: int = dspy.OutputField(desc="Tiempo estimado en minutos")
+    energy_required: str = dspy.OutputField(desc="Energía requerida: deep_work, medium, low")
+    should_divide: bool = dspy.OutputField(desc="Si la tarea debe dividirse en subtareas")
+    suggested_subtasks: str = dspy.OutputField(desc="Subtareas sugeridas separadas por coma")
+    potential_blockers: str = dspy.OutputField(desc="Posibles bloqueadores separados por coma")
+    requires_research: bool = dspy.OutputField(desc="Si requiere investigación previa")
+    research_topics: str = dspy.OutputField(desc="Temas a investigar separados por coma")
 
 
 class Complexity(str, Enum):
@@ -46,8 +63,7 @@ class ComplexityAnalyzerAgent:
     """Agente para analizar complejidad de tareas técnicas."""
 
     def __init__(self):
-        self.lm = get_dspy_lm()
-        dspy.configure(lm=self.lm)
+        setup_dspy()
         self.analyzer = dspy.ChainOfThought(ComplexitySignature)
 
         # Stack técnico del usuario (de Documentacion.MD)

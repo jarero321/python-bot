@@ -18,11 +18,23 @@ class UserIntent(str, Enum):
     # Tareas y productividad
     TASK_CREATE = "task_create"      # Crear nueva tarea
     TASK_UPDATE = "task_update"      # Actualizar tarea existente
+    TASK_DELETE = "task_delete"      # Eliminar/completar tarea
     TASK_QUERY = "task_query"        # Preguntar sobre tareas
 
     # Ideas y captura
     IDEA = "idea"                    # Capturar una idea
     NOTE = "note"                    # Guardar una nota
+
+    # Recordatorios
+    REMINDER_CREATE = "reminder_create"  # Crear un recordatorio
+    REMINDER_QUERY = "reminder_query"    # Consultar recordatorios
+
+    # Planificación
+    PLAN_TOMORROW = "plan_tomorrow"      # Planificar mañana
+    PLAN_WEEK = "plan_week"              # Ver/planificar semana
+    PRIORITIZE = "prioritize"            # Ayuda a priorizar tareas
+    RESCHEDULE = "reschedule"            # Reprogramar una tarea
+    WORKLOAD_CHECK = "workload_check"    # Revisar carga de trabajo
 
     # Finanzas
     EXPENSE_LOG = "expense_log"      # Registrar un gasto
@@ -36,6 +48,9 @@ class UserIntent(str, Enum):
     NUTRITION_QUERY = "nutrition_query"  # Preguntar sobre nutrición
 
     # Proyectos y estudio
+    PROJECT_CREATE = "project_create"  # Crear nuevo proyecto
+    PROJECT_UPDATE = "project_update"  # Actualizar proyecto existente
+    PROJECT_DELETE = "project_delete"  # Eliminar/cerrar proyecto
     PROJECT_QUERY = "project_query"  # Preguntar sobre proyectos
     STUDY_SESSION = "study_session"  # Iniciar sesión de estudio
 
@@ -60,18 +75,29 @@ class ClassifyIntent(dspy.Signature):
     intent: str = dspy.OutputField(
         desc="""La intención del usuario. Debe ser una de:
         - task_create: quiere crear/agregar una tarea o algo que hacer
-        - task_update: quiere actualizar, completar o modificar una tarea
+        - task_update: quiere actualizar o modificar una tarea existente
+        - task_delete: quiere eliminar, completar o marcar como hecha una tarea
         - task_query: pregunta sobre sus tareas pendientes
         - idea: tiene una idea que quiere guardar
         - note: quiere guardar una nota o información
+        - reminder_create: quiere crear un RECORDATORIO (ej: "recuérdame X", "ponme un recordatorio")
+        - reminder_query: pregunta sobre sus recordatorios
+        - plan_tomorrow: quiere planificar mañana (ej: "qué hago mañana", "planifica mi día")
+        - plan_week: quiere ver o planificar su semana (ej: "cómo va mi semana", "qué tengo esta semana")
+        - prioritize: necesita ayuda para priorizar entre tareas (ej: "qué hago primero", "X o Y primero")
+        - reschedule: quiere mover/reprogramar una tarea (ej: "mueve X para mañana", "necesito más tiempo")
+        - workload_check: quiere revisar su carga de trabajo (ej: "cuánto tengo pendiente", "estoy sobrecargado")
         - expense_log: quiere registrar un gasto que ya hizo
         - expense_analyze: menciona algo que QUIERE comprar (con precio $)
         - debt_query: pregunta sobre sus deudas
         - gym_log: quiere registrar su entrenamiento de hoy
-        - gym_query: pregunta sobre su historial de gym
-        - nutrition_log: quiere registrar lo que comió
+        - gym_query: pregunta sobre su historial de gym o pesos levantados
+        - nutrition_log: quiere registrar lo que comió (desayuno, comida, cena)
         - nutrition_query: pregunta sobre su alimentación
-        - project_query: pregunta sobre sus proyectos
+        - project_create: quiere CREAR un nuevo proyecto
+        - project_update: quiere modificar o actualizar un proyecto existente
+        - project_delete: quiere eliminar, cerrar o archivar un proyecto
+        - project_query: pregunta sobre sus proyectos existentes
         - study_session: quiere estudiar o hacer deep work
         - greeting: es un saludo simple
         - help: pide ayuda sobre el bot
@@ -170,17 +196,29 @@ class IntentRouterAgent(BaseAgent):
 
         # Mapeo de variaciones comunes
         intent_map = {
+            # Tareas
             "task_create": UserIntent.TASK_CREATE,
             "task create": UserIntent.TASK_CREATE,
             "create_task": UserIntent.TASK_CREATE,
             "nueva_tarea": UserIntent.TASK_CREATE,
             "task_update": UserIntent.TASK_UPDATE,
             "task update": UserIntent.TASK_UPDATE,
+            "task_delete": UserIntent.TASK_DELETE,
+            "task delete": UserIntent.TASK_DELETE,
             "task_query": UserIntent.TASK_QUERY,
             "task query": UserIntent.TASK_QUERY,
+            # Ideas y notas
             "idea": UserIntent.IDEA,
             "note": UserIntent.NOTE,
             "nota": UserIntent.NOTE,
+            # Recordatorios
+            "reminder_create": UserIntent.REMINDER_CREATE,
+            "reminder create": UserIntent.REMINDER_CREATE,
+            "create_reminder": UserIntent.REMINDER_CREATE,
+            "recordatorio": UserIntent.REMINDER_CREATE,
+            "reminder_query": UserIntent.REMINDER_QUERY,
+            "reminder query": UserIntent.REMINDER_QUERY,
+            # Finanzas
             "expense_log": UserIntent.EXPENSE_LOG,
             "expense log": UserIntent.EXPENSE_LOG,
             "expense_analyze": UserIntent.EXPENSE_ANALYZE,
@@ -188,18 +226,45 @@ class IntentRouterAgent(BaseAgent):
             "compra": UserIntent.EXPENSE_ANALYZE,
             "debt_query": UserIntent.DEBT_QUERY,
             "debt query": UserIntent.DEBT_QUERY,
+            # Gym
             "gym_log": UserIntent.GYM_LOG,
             "gym log": UserIntent.GYM_LOG,
             "gym_query": UserIntent.GYM_QUERY,
             "gym query": UserIntent.GYM_QUERY,
+            # Nutrición
             "nutrition_log": UserIntent.NUTRITION_LOG,
             "nutrition log": UserIntent.NUTRITION_LOG,
             "nutrition_query": UserIntent.NUTRITION_QUERY,
             "nutrition query": UserIntent.NUTRITION_QUERY,
+            # Proyectos
+            "project_create": UserIntent.PROJECT_CREATE,
+            "project create": UserIntent.PROJECT_CREATE,
+            "create_project": UserIntent.PROJECT_CREATE,
+            "nuevo_proyecto": UserIntent.PROJECT_CREATE,
+            "project_update": UserIntent.PROJECT_UPDATE,
+            "project update": UserIntent.PROJECT_UPDATE,
+            "project_delete": UserIntent.PROJECT_DELETE,
+            "project delete": UserIntent.PROJECT_DELETE,
             "project_query": UserIntent.PROJECT_QUERY,
             "project query": UserIntent.PROJECT_QUERY,
+            # Estudio
             "study_session": UserIntent.STUDY_SESSION,
             "study session": UserIntent.STUDY_SESSION,
+            # Planificación
+            "plan_tomorrow": UserIntent.PLAN_TOMORROW,
+            "plan tomorrow": UserIntent.PLAN_TOMORROW,
+            "planificar_manana": UserIntent.PLAN_TOMORROW,
+            "plan_week": UserIntent.PLAN_WEEK,
+            "plan week": UserIntent.PLAN_WEEK,
+            "planificar_semana": UserIntent.PLAN_WEEK,
+            "prioritize": UserIntent.PRIORITIZE,
+            "priorizar": UserIntent.PRIORITIZE,
+            "reschedule": UserIntent.RESCHEDULE,
+            "reprogramar": UserIntent.RESCHEDULE,
+            "workload_check": UserIntent.WORKLOAD_CHECK,
+            "workload check": UserIntent.WORKLOAD_CHECK,
+            "carga_trabajo": UserIntent.WORKLOAD_CHECK,
+            # General
             "greeting": UserIntent.GREETING,
             "saludo": UserIntent.GREETING,
             "help": UserIntent.HELP,
@@ -226,6 +291,7 @@ class IntentRouterAgent(BaseAgent):
             IntentResult con la intención, confianza y entidades
         """
         self.logger.info(f"Clasificando mensaje: {message[:50]}...")
+        print(f"[INTENT] Ejecutando classifier...")
 
         try:
             # Ejecutar clasificación con DSPy
@@ -233,6 +299,7 @@ class IntentRouterAgent(BaseAgent):
                 message=message,
                 conversation_context=conversation_context
             )
+            print(f"[INTENT] Resultado raw: {result}")
 
             # Parsear resultados
             intent = self._normalize_intent(result.intent)
@@ -264,6 +331,9 @@ class IntentRouterAgent(BaseAgent):
             )
 
         except Exception as e:
+            print(f"[INTENT] ERROR en clasificación: {e}")
+            import traceback
+            traceback.print_exc()
             self.logger.error(f"Error clasificando mensaje: {e}")
             # Fallback a UNKNOWN con baja confianza
             return IntentResult(
@@ -334,6 +404,17 @@ class IntentRouterAgent(BaseAgent):
                 raw_message=message,
             )
 
+        # Proyectos
+        project_words = ["crear proyecto", "nuevo proyecto", "project", "iniciar proyecto"]
+        if any(p in text_lower for p in project_words):
+            return IntentResult(
+                intent=UserIntent.PROJECT_CREATE,
+                confidence=0.8,
+                entities=self._extract_project_info(message),
+                suggested_response=None,
+                raw_message=message,
+            )
+
         # Default: probablemente una tarea o nota
         task_indicators = ["tengo que", "debo", "necesito", "hacer", "terminar", "completar"]
         if any(t in text_lower for t in task_indicators):
@@ -371,6 +452,43 @@ class IntentRouterAgent(BaseAgent):
             if match:
                 amount = match.group(1).replace(",", "")
                 entities["amount"] = amount
+                break
+
+        return entities
+
+    def _extract_project_info(self, message: str) -> dict[str, str]:
+        """Extrae información del proyecto del mensaje."""
+        import re
+
+        entities = {}
+        text_lower = message.lower()
+
+        # Patrones para extraer nombre del proyecto
+        # "crear proyecto PayCash" -> project_name: "PayCash"
+        # "nuevo proyecto API Integration - trabajo" -> project_name: "API Integration", type: "trabajo"
+        patterns = [
+            r'(?:crear|nuevo|iniciar)\s+proyecto\s+["\']?([^"\',-]+)["\']?',
+            r'proyecto\s+["\']?([^"\',-]+)["\']?',
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, message, re.IGNORECASE)
+            if match:
+                entities["project_name"] = match.group(1).strip()
+                break
+
+        # Detectar tipo de proyecto
+        type_keywords = {
+            "trabajo": ["trabajo", "work", "paycash", "oficina"],
+            "freelance": ["freelance", "cliente", "workana"],
+            "personal": ["personal", "casa", "propio"],
+            "estudio": ["estudio", "aprender", "curso", "estudiar"],
+            "side_project": ["side project", "hobby", "experimento"],
+        }
+
+        for project_type, keywords in type_keywords.items():
+            if any(kw in text_lower for kw in keywords):
+                entities["project_type"] = project_type
                 break
 
         return entities

@@ -8,12 +8,14 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 def confirm_keyboard(
     confirm_data: str = "confirm",
     cancel_data: str = "cancel",
+    confirm_text: str = "✅ Confirmar",
+    cancel_text: str = "❌ Cancelar",
 ) -> InlineKeyboardMarkup:
-    """Teclado de confirmación simple."""
+    """Teclado de confirmación simple con textos personalizables."""
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("✅ Confirmar", callback_data=confirm_data),
-            InlineKeyboardButton("❌ Cancelar", callback_data=cancel_data),
+            InlineKeyboardButton(confirm_text, callback_data=confirm_data),
+            InlineKeyboardButton(cancel_text, callback_data=cancel_data),
         ]
     ])
 
@@ -265,6 +267,56 @@ def energy_level_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton("😐 3", callback_data="energy:3"),
             InlineKeyboardButton("🙂 4", callback_data="energy:4"),
             InlineKeyboardButton("⚡ 5", callback_data="energy:5"),
+        ],
+    ])
+
+
+# ==================== ESTUDIO ====================
+
+def study_options_keyboard(suggestion: dict) -> InlineKeyboardMarkup:
+    """Teclado de opciones de estudio."""
+    buttons = []
+
+    # Botón principal si hay sugerencia
+    if suggestion.get("topic") and suggestion["topic"] != "Sin proyectos de estudio definidos":
+        project_id = suggestion.get("project_id", "none")
+        buttons.append([
+            InlineKeyboardButton(
+                f"✅ Estudiar {suggestion['topic'][:20]}",
+                callback_data=f"study_start_{project_id[:8] if project_id else 'none'}",
+            ),
+        ])
+
+    # Alternativas
+    for i, alt in enumerate(suggestion.get("alternatives", [])[:2]):
+        buttons.append([
+            InlineKeyboardButton(
+                f"📖 {alt[:25]}",
+                callback_data=f"study_alt_{i}",
+            ),
+        ])
+
+    # Opciones adicionales
+    buttons.append([
+        InlineKeyboardButton("⏰ En 30 min", callback_data="study_later_30"),
+        InlineKeyboardButton("❌ Hoy no", callback_data="study_skip"),
+    ])
+
+    return InlineKeyboardMarkup(buttons)
+
+
+# ==================== PAYDAY ====================
+
+def payday_actions_keyboard() -> InlineKeyboardMarkup:
+    """Teclado de acciones para payday."""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Seguir plan", callback_data="payday_follow_plan"),
+            InlineKeyboardButton("✏️ Ajustar", callback_data="payday_adjust"),
+        ],
+        [
+            InlineKeyboardButton("📊 Ver deudas", callback_data="payday_view_debts"),
+            InlineKeyboardButton("⏭️ Recordar después", callback_data="payday_later"),
         ],
     ])
 

@@ -6,7 +6,7 @@ from enum import Enum
 
 import dspy
 
-from app.agents.base import get_dspy_lm, AnalyzeNutrition
+from app.agents.base import setup_dspy, AnalyzeNutrition
 
 logger = logging.getLogger(__name__)
 
@@ -72,8 +72,7 @@ class NutritionAnalyzerAgent:
     """Agente para analizar nutrición del día."""
 
     def __init__(self):
-        self.lm = get_dspy_lm()
-        dspy.configure(lm=self.lm)
+        setup_dspy()
         self.analyzer = dspy.ChainOfThought(AnalyzeNutrition)
 
         # Objetivos de Carlos (de Documentacion.MD)

@@ -1230,7 +1230,7 @@ def get_purchase_conversation_handler() -> ConversationHandler:
                 start_purchase_analysis,
             ),
             MessageHandler(
-                filters.TEXT & filters.Regex(r'[\d,\.]+\s*pesos', re.IGNORECASE),
+                filters.TEXT & filters.Regex(r'(?i)[\d,\.]+\s*pesos'),
                 start_purchase_analysis,
             ),
         ],

@@ -182,7 +182,7 @@ async def test_base_agents():
     from app.agents.base import (
         MessageClassifier,
         TaskExtractor,
-        get_dspy_lm,
+        setup_dspy,
     )
 
     print("\n" + "=" * 60)
@@ -192,8 +192,8 @@ async def test_base_agents():
     # Verificar conexión con LLM
     print("\n1. Verificando conexión con LLM...")
     try:
-        lm = get_dspy_lm()
-        print(f"   ✓ LLM configurado: {type(lm).__name__}")
+        setup_dspy()
+        print("   ✓ DSPy configurado correctamente")
     except Exception as e:
         print(f"   ✗ Error configurando LLM: {e}")
         return False

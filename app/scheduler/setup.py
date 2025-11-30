@@ -36,7 +36,7 @@ async def setup_scheduler() -> AsyncIOScheduler:
     scheduler = get_scheduler()
 
     # Importar jobs
-    from app.scheduler.jobs.morning_briefing import morning_briefing_job
+    from app.scheduler.jobs.morning_briefing import morning_briefing_job, monday_workload_alert
     from app.scheduler.jobs.hourly_checkin import hourly_checkin_job
     from app.scheduler.jobs.gym_reminder import gym_reminder_job
     from app.scheduler.jobs.nutrition_reminder import nutrition_reminder_job
@@ -44,6 +44,19 @@ async def setup_scheduler() -> AsyncIOScheduler:
     from app.scheduler.jobs.weekly_review import weekly_review_job
     from app.scheduler.jobs.payday_alert import pre_payday_job, post_payday_job
     from app.scheduler.jobs.study_reminder import study_reminder_job
+    from app.scheduler.jobs.proactive_tracker import (
+        proactive_task_check,
+        deadline_alert_check,
+        stale_tasks_check,
+        task_completion_follow_up,
+        blocked_tasks_reminder,
+    )
+    from app.scheduler.jobs.reminder_dispatcher import (
+        dispatch_pending_reminders,
+        cleanup_old_reminders,
+        send_evening_planning_prompt,
+        send_morning_plan_reminder,
+    )
 
     # ==================== MORNING BRIEFING ====================
     # 6:30 AM todos los días
@@ -144,6 +157,113 @@ async def setup_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
     logger.info("Job configurado: Post-Payday Reminder (días 15, 30 a las 6:00 PM)")
+
+    # ==================== MONDAY WORKLOAD ALERT ====================
+    # Lunes a las 7:00 AM - resumen de carga de trabajo
+    scheduler.add_job(
+        monday_workload_alert,
+        CronTrigger(hour=7, minute=0, day_of_week="mon"),
+        id="monday_workload",
+        name="Monday Workload Alert",
+        replace_existing=True,
+    )
+    logger.info("Job configurado: Monday Workload Alert (Lunes 7:00 AM)")
+
+    # ==================== PROACTIVE TASK TRACKING ====================
+
+    # Verificación proactiva cada hora (9-18 L-V)
+    scheduler.add_job(
+        proactive_task_check,
+        CronTrigger(hour="9-18", minute=0, day_of_week="mon-fri"),
+        id="proactive_task_check",
+        name="Proactive Task Check",
+        replace_existing=True,
+    )
+    logger.info("Job configurado: Proactive Task Check (cada hora 9-18 L-V)")
+
+    # Alertas de deadline (9 AM y 3 PM)
+    scheduler.add_job(
+        deadline_alert_check,
+        CronTrigger(hour="9,15", minute=0),
+        id="deadline_alert",
+        name="Deadline Alert Check",
+        replace_existing=True,
+    )
+    logger.info("Job configurado: Deadline Alert Check (9 AM, 3 PM)")
+
+    # Tareas estancadas (5 PM diario)
+    scheduler.add_job(
+        stale_tasks_check,
+        CronTrigger(hour=17, minute=0),
+        id="stale_tasks_check",
+        name="Stale Tasks Check",
+        replace_existing=True,
+    )
+    logger.info("Job configurado: Stale Tasks Check (5:00 PM)")
+
+    # Seguimiento de completadas (7 PM diario)
+    scheduler.add_job(
+        task_completion_follow_up,
+        CronTrigger(hour=19, minute=0),
+        id="task_completion_followup",
+        name="Task Completion Follow-up",
+        replace_existing=True,
+    )
+    logger.info("Job configurado: Task Completion Follow-up (7:00 PM)")
+
+    # Recordatorio de bloqueadas (cada 4 horas en horario laboral)
+    scheduler.add_job(
+        blocked_tasks_reminder,
+        CronTrigger(hour="10,14,18", minute=0, day_of_week="mon-fri"),
+        id="blocked_tasks_reminder",
+        name="Blocked Tasks Reminder",
+        replace_existing=True,
+    )
+    logger.info("Job configurado: Blocked Tasks Reminder (10 AM, 2 PM, 6 PM L-V)")
+
+    # ==================== REMINDER DISPATCHER ====================
+
+    # Despachar recordatorios cada 2 minutos
+    scheduler.add_job(
+        dispatch_pending_reminders,
+        IntervalTrigger(minutes=2),
+        id="reminder_dispatcher",
+        name="Reminder Dispatcher",
+        replace_existing=True,
+    )
+    logger.info("Job configurado: Reminder Dispatcher (cada 2 min)")
+
+    # Limpieza de recordatorios antiguos (3 AM diario)
+    scheduler.add_job(
+        cleanup_old_reminders,
+        CronTrigger(hour=3, minute=0),
+        id="reminder_cleanup",
+        name="Reminder Cleanup",
+        replace_existing=True,
+    )
+    logger.info("Job configurado: Reminder Cleanup (3:00 AM)")
+
+    # ==================== PLANNING PROMPTS ====================
+
+    # Prompt de planificación nocturna (9 PM)
+    scheduler.add_job(
+        send_evening_planning_prompt,
+        CronTrigger(hour=21, minute=0),
+        id="evening_planning_prompt",
+        name="Evening Planning Prompt",
+        replace_existing=True,
+    )
+    logger.info("Job configurado: Evening Planning Prompt (9:00 PM)")
+
+    # Recordatorio del plan matutino (7:30 AM)
+    scheduler.add_job(
+        send_morning_plan_reminder,
+        CronTrigger(hour=7, minute=30),
+        id="morning_plan_reminder",
+        name="Morning Plan Reminder",
+        replace_existing=True,
+    )
+    logger.info("Job configurado: Morning Plan Reminder (7:30 AM)")
 
     # Iniciar scheduler si no está corriendo
     if not scheduler.running:

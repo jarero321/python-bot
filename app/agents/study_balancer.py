@@ -7,7 +7,7 @@ from enum import Enum
 
 import dspy
 
-from app.agents.base import get_dspy_lm
+from app.agents.base import setup_dspy
 
 logger = logging.getLogger(__name__)
 
@@ -103,8 +103,7 @@ class StudyBalancerAgent:
     """Agente para sugerir temas de estudio balanceados."""
 
     def __init__(self):
-        self.lm = get_dspy_lm()
-        dspy.configure(lm=self.lm)
+        setup_dspy()
         self.suggester = dspy.ChainOfThought(SuggestStudyTopic)
 
         # Proyectos de estudio de Carlos (de Documentacion.MD)

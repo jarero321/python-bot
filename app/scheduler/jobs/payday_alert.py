@@ -226,31 +226,3 @@ def _format_post_payday_message() -> str:
     return message
 
 
-def payday_actions_keyboard():
-    """Teclado de acciones para payday."""
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-
-    keyboard = [
-        [
-            InlineKeyboardButton(
-                "✅ Seguir plan",
-                callback_data="payday_follow_plan",
-            ),
-            InlineKeyboardButton(
-                "✏️ Ajustar",
-                callback_data="payday_adjust",
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                "📊 Ver deudas",
-                callback_data="payday_view_debts",
-            ),
-            InlineKeyboardButton(
-                "⏭️ Recordar después",
-                callback_data="payday_later",
-            ),
-        ],
-    ]
-
-    return InlineKeyboardMarkup(keyboard)

@@ -8,7 +8,7 @@ from enum import Enum
 
 import dspy
 
-from app.agents.base import get_dspy_lm
+from app.agents.base import setup_dspy
 
 logger = logging.getLogger(__name__)
 
@@ -108,8 +108,7 @@ class WorkoutLoggerAgent:
     """Agente para registrar y analizar sesiones de gym."""
 
     def __init__(self):
-        self.lm = get_dspy_lm()
-        dspy.configure(lm=self.lm)
+        setup_dspy()
         self.parser = dspy.ChainOfThought(ParseWorkoutInput)
 
         # Ejercicios estándar por tipo (de Documentacion.MD)

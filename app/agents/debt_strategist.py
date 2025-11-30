@@ -6,7 +6,7 @@ from enum import Enum
 
 import dspy
 
-from app.agents.base import get_dspy_lm
+from app.agents.base import setup_dspy
 
 logger = logging.getLogger(__name__)
 
@@ -100,8 +100,7 @@ class DebtStrategistAgent:
     """Agente para optimizar pagos de deudas."""
 
     def __init__(self):
-        self.lm = get_dspy_lm()
-        dspy.configure(lm=self.lm)
+        setup_dspy()
         self.analyzer = dspy.ChainOfThought(AnalyzeDebtStrategy)
 
         # Datos de Carlos (de Documentacion.MD)

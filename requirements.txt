@@ -7,8 +7,9 @@ python-multipart==0.0.6
 python-telegram-bot==20.7
 
 # AI
-dspy-ai==2.4.0
-google-generativeai==0.3.2
+dspy==2.6.27
+google-generativeai>=0.8.0
+litellm>=1.50.0
 
 # Notion
 notion-client==2.2.1
@@ -27,6 +28,9 @@ pydantic-settings==2.1.0
 httpx~=0.25.2
 tenacity==8.2.3
 pytz==2024.1
+
+# Voice support (optional - for TTS fallback)
+gTTS==2.5.0
 
 # Dev
 pytest==7.4.4

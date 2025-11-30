@@ -1,7 +1,7 @@
 """AI Agents para Carlos Command."""
 
 from app.agents.base import (
-    get_dspy_lm,
+    setup_dspy,
     MessageClassifier,
     TaskExtractor,
     ComplexityAnalyzer,
@@ -74,10 +74,59 @@ from app.agents.study_balancer import (
     EnergyLevel as StudyEnergyLevel,
 )
 
+from app.agents.intent_router import (
+    IntentRouterAgent,
+    UserIntent,
+    IntentResult,
+    get_intent_router,
+)
+
+from app.agents.orchestrator import (
+    AgentOrchestrator,
+    OrchestratorMode,
+    UserContext,
+    TaskPlanningResult,
+    ProactiveNotification,
+    get_orchestrator,
+)
+
+from app.agents.task_planner import (
+    TaskPlannerAgent,
+    TaskScheduleResult,
+    DeadlineDetectionResult,
+    Reminder,
+    get_task_planner,
+)
+
+from app.agents.conversation_context import (
+    ConversationContext,
+    ConversationState,
+    ConversationStore,
+    ConversationMessage,
+    ActiveEntity,
+    PendingAction,
+    EntityType,
+    get_conversation_store,
+)
+
+from app.agents.conversational_orchestrator import (
+    ConversationalOrchestrator,
+    ConversationalResponse,
+    get_conversational_orchestrator,
+)
+
+from app.agents.planning_assistant import (
+    PlanningAssistant,
+    TomorrowPlan,
+    PrioritizationResult,
+    RescheduleResult,
+    get_planning_assistant,
+)
+
 
 __all__ = [
     # Base
-    "get_dspy_lm",
+    "setup_dspy",
     "MessageClassifier",
     "TaskExtractor",
     "ComplexityAnalyzer",
@@ -130,4 +179,41 @@ __all__ = [
     "StudySession",
     "StudySuggestionResult",
     "StudyEnergyLevel",
+    # Intent Router
+    "IntentRouterAgent",
+    "UserIntent",
+    "IntentResult",
+    "get_intent_router",
+    # Orchestrator
+    "AgentOrchestrator",
+    "OrchestratorMode",
+    "UserContext",
+    "TaskPlanningResult",
+    "ProactiveNotification",
+    "get_orchestrator",
+    # Task Planner
+    "TaskPlannerAgent",
+    "TaskScheduleResult",
+    "DeadlineDetectionResult",
+    "Reminder",
+    "get_task_planner",
+    # Conversation Context
+    "ConversationContext",
+    "ConversationState",
+    "ConversationStore",
+    "ConversationMessage",
+    "ActiveEntity",
+    "PendingAction",
+    "EntityType",
+    "get_conversation_store",
+    # Conversational Orchestrator
+    "ConversationalOrchestrator",
+    "ConversationalResponse",
+    "get_conversational_orchestrator",
+    # Planning Assistant
+    "PlanningAssistant",
+    "TomorrowPlan",
+    "PrioritizationResult",
+    "RescheduleResult",
+    "get_planning_assistant",
 ]

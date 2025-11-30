@@ -7,7 +7,7 @@ from typing import Any
 
 import dspy
 
-from app.agents.base import get_dspy_lm, GenerateMorningPlan
+from app.agents.base import setup_dspy, GenerateMorningPlan
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +40,7 @@ class MorningPlannerAgent:
     """Agente para crear el plan del día."""
 
     def __init__(self):
-        self.lm = get_dspy_lm()
-        dspy.configure(lm=self.lm)
+        setup_dspy()
         self.planner = dspy.ChainOfThought(GenerateMorningPlan)
 
         # Bloques de tiempo estándar (de Documentacion.MD)

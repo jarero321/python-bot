@@ -22,22 +22,37 @@ def setup_dspy() -> None:
     global _dspy_configured
 
     if _dspy_configured:
+        print("[DSPY] Ya configurado, saltando...")
         return
 
-    # Configurar Gemini API
-    genai.configure(api_key=settings.gemini_api_key)
+    print("[DSPY] Configurando DSPy con Gemini...")
 
-    # Configurar DSPy con Gemini
-    lm = dspy.LM(
-        model="gemini/gemini-1.5-flash",
-        api_key=settings.gemini_api_key,
-        temperature=0.7,
-        max_tokens=1024,
-    )
-    dspy.configure(lm=lm)
+    try:
+        # Configurar Gemini API
+        print("[DSPY] Configurando Gemini API...")
+        genai.configure(api_key=settings.gemini_api_key)
+        print("[DSPY] Gemini API configurada OK")
 
-    _dspy_configured = True
-    logger.info("DSPy configurado con Gemini")
+        # Configurar DSPy con Gemini (usando dspy.LM via LiteLLM)
+        print("[DSPY] Creando LM con Gemini...")
+        lm = dspy.LM(
+            model="gemini/gemini-2.0-flash",
+            api_key=settings.gemini_api_key,
+            temperature=0.7,
+            max_tokens=1024,
+        )
+        print("[DSPY] Google LM creado OK, configurando dspy...")
+        dspy.configure(lm=lm)
+        print("[DSPY] dspy.configure OK")
+
+        _dspy_configured = True
+        logger.info("DSPy configurado con Gemini")
+        print("[DSPY] Setup completado!")
+    except Exception as e:
+        print(f"[DSPY] ERROR en setup: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 
 def ensure_dspy_configured(func: Callable) -> Callable:
@@ -218,6 +233,30 @@ class AnalyzeNutrition(dspy.Signature):
     )
     suggestions: str = dspy.OutputField(
         desc="Sugerencias para mejorar"
+    )
+
+
+class EstimateMealCalories(dspy.Signature):
+    """Estima calorías y categoría de una comida individual."""
+
+    meal_description: str = dspy.InputField(
+        desc="Descripción de la comida, ej: '3 huevos con pan tostado'"
+    )
+    meal_type: str = dspy.InputField(
+        desc="Tipo de comida: desayuno, almuerzo, cena, snack"
+    )
+
+    calories: int = dspy.OutputField(
+        desc="Estimación de calorías de la comida (número entero)"
+    )
+    protein_grams: int = dspy.OutputField(
+        desc="Estimación de proteína en gramos"
+    )
+    category: str = dspy.OutputField(
+        desc="Categoría: saludable, moderado, pesado"
+    )
+    feedback: str = dspy.OutputField(
+        desc="Breve feedback sobre la comida (1-2 oraciones)"
     )
 
 

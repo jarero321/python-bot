@@ -182,34 +182,3 @@ def _format_study_message(suggestion: dict) -> str:
     return message
 
 
-def study_options_keyboard(suggestion: dict):
-    """Teclado de opciones de estudio."""
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-
-    buttons = []
-
-    # Botón principal si hay sugerencia
-    if suggestion["topic"] and suggestion["topic"] != "Sin proyectos de estudio definidos":
-        buttons.append([
-            InlineKeyboardButton(
-                f"✅ Estudiar {suggestion['topic'][:20]}",
-                callback_data=f"study_start_{suggestion['project_id'][:8] if suggestion['project_id'] else 'none'}",
-            ),
-        ])
-
-    # Alternativas
-    for i, alt in enumerate(suggestion["alternatives"][:2]):
-        buttons.append([
-            InlineKeyboardButton(
-                f"📖 {alt[:25]}",
-                callback_data=f"study_alt_{i}",
-            ),
-        ])
-
-    # Opciones adicionales
-    buttons.append([
-        InlineKeyboardButton("⏰ En 30 min", callback_data="study_later_30"),
-        InlineKeyboardButton("❌ Hoy no", callback_data="study_skip"),
-    ])
-
-    return InlineKeyboardMarkup(buttons)

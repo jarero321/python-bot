@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 import dspy
 
-from app.agents.base import get_dspy_lm
+from app.agents.base import setup_dspy
 
 logger = logging.getLogger(__name__)
 
@@ -98,8 +98,7 @@ class JiraHelperAgent:
     """Agente para ayudar con documentación en Jira."""
 
     def __init__(self):
-        self.lm = get_dspy_lm()
-        dspy.configure(lm=self.lm)
+        setup_dspy()
         self.content_generator = dspy.ChainOfThought(GenerateJiraContent)
         self.story_generator = dspy.ChainOfThought(GenerateUserStory)
 

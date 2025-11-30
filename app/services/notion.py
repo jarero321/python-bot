@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-class NotionDatabase(str, Enum):
+class NotionDatabase:
     """IDs de las bases de datos de Notion."""
 
     INBOX = "6a4c92f0fa26438186a51b456b6ac63c"
@@ -344,10 +344,10 @@ class NotionService:
                 properties["Complejidad"] = {"select": {"name": complejidad.value}}
 
             if energia:
-                properties["Energía"] = {"select": {"name": energia.value}}
+                properties["Energia"] = {"select": {"name": energia.value}}
 
             if tiempo_est:
-                properties["Tiempo Est."] = {"select": {"name": tiempo_est}}
+                properties["Tiempo Est"] = {"select": {"name": tiempo_est}}
 
             if bloque:
                 properties["Bloque"] = {"select": {"name": bloque.value}}
@@ -583,6 +583,53 @@ class NotionService:
             logger.error(f"Error actualizando blocker: {e}")
             return None
 
+    async def update_task_priority(
+        self, page_id: str, priority: TaskPrioridad
+    ) -> dict[str, Any] | None:
+        """Actualiza la prioridad de una tarea."""
+        try:
+            response = await self.client.pages.update(
+                page_id=page_id,
+                properties={
+                    "Prioridad": {"select": {"name": priority.value}},
+                },
+            )
+            logger.info(f"Tarea {page_id} prioridad: {priority.value}")
+            await self.invalidate_tasks_cache()
+            return response
+        except APIResponseError as e:
+            logger.error(f"Error actualizando prioridad: {e}")
+            return None
+
+    async def update_task_dates(
+        self,
+        page_id: str,
+        fecha_do: str | None = None,
+        fecha_due: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Actualiza las fechas de una tarea."""
+        try:
+            properties = {}
+
+            if fecha_do:
+                properties["Fecha Do"] = {"date": {"start": fecha_do}}
+            if fecha_due:
+                properties["Fecha Due"] = {"date": {"start": fecha_due}}
+
+            if not properties:
+                return None
+
+            response = await self.client.pages.update(
+                page_id=page_id,
+                properties=properties,
+            )
+            logger.info(f"Tarea {page_id} fechas actualizadas")
+            await self.invalidate_tasks_cache()
+            return response
+        except APIResponseError as e:
+            logger.error(f"Error actualizando fechas: {e}")
+            return None
+
     # ==================== PROJECTS ====================
     # Campos: Proyecto (Title), Tipo (Select), Estado (Select),
     #         Objetivo (Text), Hito Actual (Text), Progreso Hito (Number),
@@ -659,41 +706,98 @@ class NotionService:
     ) -> dict[str, Any] | None:
         """Crea un nuevo proyecto."""
         try:
+            # Propiedades básicas requeridas
             properties = {
                 "Proyecto": {"title": [{"text": {"content": nombre}}]},
                 "Tipo": {"select": {"name": tipo.value}},
                 "Estado": {"select": {"name": estado.value}},
-                "Genera Dinero": {"checkbox": genera_dinero},
-                "En Rotación Estudio": {"checkbox": en_rotacion_estudio},
             }
 
+            # Propiedades opcionales - solo agregar si existen en la DB
+            # Estas se agregan con try/except individual para manejar si no existen
+            optional_properties = {
+                "Genera Dinero": {"checkbox": genera_dinero},
+            }
+
+            # Solo agregar "En Rotacion Estudio" si es True (para proyectos de estudio)
+            # Nota: Sin tilde porque así está en Notion
+            if en_rotacion_estudio:
+                optional_properties["En Rotacion Estudio"] = {"checkbox": en_rotacion_estudio}
+
             if objetivo:
-                properties["Objetivo"] = {"rich_text": [{"text": {"content": objetivo}}]}
+                optional_properties["Objetivo"] = {"rich_text": [{"text": {"content": objetivo}}]}
 
             if ingreso_potencial is not None:
-                properties["Ingreso Potencial"] = {"number": ingreso_potencial}
+                optional_properties["Ingreso Potencial"] = {"number": ingreso_potencial}
 
             if costo is not None:
-                properties["Costo"] = {"number": costo}
+                optional_properties["Costo"] = {"number": costo}
 
             if cliente:
-                properties["Cliente"] = {"rich_text": [{"text": {"content": cliente}}]}
+                optional_properties["Cliente"] = {"rich_text": [{"text": {"content": cliente}}]}
 
             if deadline:
-                properties["Deadline"] = {"date": {"start": deadline}}
+                optional_properties["Deadline"] = {"date": {"start": deadline}}
 
             if notas:
-                properties["Notas"] = {"rich_text": [{"text": {"content": notas}}]}
+                optional_properties["Notas"] = {"rich_text": [{"text": {"content": notas}}]}
 
-            response = await self.client.pages.create(
-                parent={"database_id": NotionDatabase.PROJECTS},
-                properties=properties,
-            )
-            logger.info(f"Proyecto creado: {nombre}")
-            return response
+            # Intentar crear con todas las propiedades primero
+            all_properties = {**properties, **optional_properties}
+
+            try:
+                response = await self.client.pages.create(
+                    parent={"database_id": NotionDatabase.PROJECTS},
+                    properties=all_properties,
+                )
+                logger.info(f"Proyecto creado: {nombre}")
+                return response
+            except APIResponseError as first_error:
+                # Si falla por propiedad no existente, intentar solo con las básicas
+                error_msg = str(first_error)
+                if "is not a property that exists" in error_msg:
+                    logger.warning(f"Propiedad opcional no existe, creando con propiedades básicas: {error_msg}")
+                    response = await self.client.pages.create(
+                        parent={"database_id": NotionDatabase.PROJECTS},
+                        properties=properties,
+                    )
+                    logger.info(f"Proyecto creado (básico): {nombre}")
+                    return response
+                else:
+                    raise first_error
+
         except APIResponseError as e:
             logger.error(f"Error creando proyecto: {e}")
             return None
+
+    async def update_project_status(
+        self,
+        page_id: str,
+        estado: ProjectEstado,
+    ) -> bool:
+        """Actualiza el estado de un proyecto."""
+        try:
+            await self.client.pages.update(
+                page_id=page_id,
+                properties={
+                    "Estado": {"select": {"name": estado.value}},
+                },
+            )
+            logger.info(f"Proyecto {page_id} actualizado a {estado.value}")
+            await self.invalidate_projects_cache()
+            return True
+        except APIResponseError as e:
+            logger.error(f"Error actualizando proyecto: {e}")
+            return False
+
+    async def update_task_status(
+        self,
+        page_id: str,
+        estado: TaskEstado,
+    ) -> bool:
+        """Wrapper para actualizar estado de tarea."""
+        result = await self.update_task_estado(page_id, estado)
+        return result is not None
 
     async def get_study_projects(self) -> list[dict[str, Any]]:
         """Obtiene proyectos en rotación de estudio."""
@@ -702,7 +806,7 @@ class NotionService:
                 database_id=NotionDatabase.PROJECTS,
                 filter={
                     "and": [
-                        {"property": "En Rotación Estudio", "checkbox": {"equals": True}},
+                        {"property": "En Rotacion Estudio", "checkbox": {"equals": True}},
                         {"property": "Estado", "select": {"equals": ProjectEstado.ACTIVO.value}},
                     ]
                 },
@@ -802,6 +906,88 @@ class NotionService:
         except APIResponseError as e:
             logger.error(f"Error obteniendo historial de nutrición: {e}")
             return []
+
+    async def get_or_create_nutrition_for_date(
+        self, fecha: str
+    ) -> dict[str, Any] | None:
+        """Obtiene o crea el registro de nutrición para una fecha."""
+        try:
+            # Buscar si existe registro para hoy
+            response = await self.client.databases.query(
+                database_id=NotionDatabase.NUTRITION,
+                filter={
+                    "property": "Fecha",
+                    "title": {"equals": fecha},
+                },
+                page_size=1,
+            )
+            results = response.get("results", [])
+
+            if results:
+                return results[0]
+            else:
+                # Crear nuevo registro
+                new_record = await self.log_nutrition(fecha=fecha)
+                return new_record
+        except APIResponseError as e:
+            logger.error(f"Error obteniendo/creando nutrición: {e}")
+            return None
+
+    async def update_meal(
+        self,
+        fecha: str,
+        meal_type: str,  # desayuno, comida, cena, snack
+        description: str,
+        calories: int | None = None,
+        category: NutritionCategoria | None = None,
+    ) -> dict[str, Any] | None:
+        """Actualiza una comida específica en el registro del día."""
+        try:
+            # Obtener o crear el registro del día
+            record = await self.get_or_create_nutrition_for_date(fecha)
+            if not record:
+                return None
+
+            page_id = record.get("id")
+
+            # Mapear tipo de comida a campos de Notion
+            meal_fields = {
+                "desayuno": ("Desayuno", "Desayuno Cal", "Desayuno Cat"),
+                "almuerzo": ("Comida", "Comida Cal", "Comida Cat"),
+                "comida": ("Comida", "Comida Cal", "Comida Cat"),
+                "cena": ("Cena", "Cena Cal", "Cena Cat"),
+                "snack": ("Snacks", "Snacks Cal", None),
+            }
+
+            fields = meal_fields.get(meal_type.lower())
+            if not fields:
+                logger.warning(f"Tipo de comida no reconocido: {meal_type}")
+                return None
+
+            text_field, cal_field, cat_field = fields
+
+            # Construir propiedades a actualizar
+            properties = {
+                text_field: {"rich_text": [{"text": {"content": description}}]},
+            }
+
+            if calories is not None:
+                properties[cal_field] = {"number": calories}
+
+            if category and cat_field:
+                properties[cat_field] = {"select": {"name": category.value}}
+
+            # Actualizar el registro
+            response = await self.client.pages.update(
+                page_id=page_id,
+                properties=properties,
+            )
+            logger.info(f"Comida {meal_type} actualizada para {fecha}")
+            return response
+
+        except APIResponseError as e:
+            logger.error(f"Error actualizando comida: {e}")
+            return None
 
     # ==================== WORKOUTS ====================
     # Campos: Fecha (Title!), Tipo (Select), Completado (Checkbox),
