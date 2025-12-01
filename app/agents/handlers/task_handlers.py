@@ -439,6 +439,12 @@ class TaskUpdateHandler(BaseIntentHandler):
                 ],
                 [
                     InlineKeyboardButton(
+                        "📁 Cambiar proyecto",
+                        callback_data=f"task_change_project_created:{matching_task.id}",
+                    ),
+                ],
+                [
+                    InlineKeyboardButton(
                         "❌ Cancelar",
                         callback_data="task_action_cancel",
                     ),

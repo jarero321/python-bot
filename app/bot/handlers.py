@@ -396,10 +396,22 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handler genérico para callbacks de botones inline."""
     query = update.callback_query
-    await query.answer()
 
     data = query.data
     logger.debug(f"Callback recibido: {data}")
+
+    # Callbacks que tardan más - mostrar feedback
+    slow_actions = [
+        "task_create_confirm", "task_create_force", "task_doing",
+        "task_complete", "task_status", "project_create_confirm",
+        "task_select_project", "task_select_project_created",
+    ]
+    action_prefix = data.split(":")[0]
+
+    if action_prefix in slow_actions:
+        await query.answer("⏳ Procesando...")
+    else:
+        await query.answer()
 
     # Parsear callback data
     parts = data.split(":")

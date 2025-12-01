@@ -412,8 +412,8 @@ class NotionService:
             )
             result = response.get("results", [])
 
-            # Guardar en cache (TTL: 2 minutos para tareas activas)
-            await cache.set(cache_key, result, ttl=120)
+            # Guardar en cache (TTL: 30 segundos para tareas activas)
+            await cache.set(cache_key, result, ttl=30)
 
             return result
         except APIResponseError as e:
