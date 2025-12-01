@@ -26,6 +26,7 @@ from app.agents.intent_router import (
 from app.agents.conversation_context import (
     ConversationContext,
     ConversationState,
+    EntityType,
     get_conversation_store,
 )
 from app.agents.enrichers import (
