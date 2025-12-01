@@ -581,6 +581,12 @@ async def handle_task_doing_callback(query, context, task_id: str | None) -> Non
         await query.edit_message_text("❌ ID de tarea no válido.")
         return
 
+    # Feedback visual inmediato
+    try:
+        await query.edit_message_text("⏳ <b>Iniciando tarea...</b>", parse_mode="HTML")
+    except Exception:
+        pass
+
     from app.domain.services import get_task_service
     from app.domain.entities.task import TaskStatus
 
@@ -602,6 +608,13 @@ async def handle_task_status_callback(query, context, task_id: str | None, statu
     if not task_id or not status:
         await query.edit_message_text("❌ Parámetros no válidos.")
         return
+
+    # Feedback visual inmediato
+    status_names = {"doing": "En progreso", "done": "Completada", "paused": "Pausada", "today": "Para hoy"}
+    try:
+        await query.edit_message_text(f"⏳ <b>Actualizando a {status_names.get(status, status)}...</b>", parse_mode="HTML")
+    except Exception:
+        pass
 
     from app.domain.services import get_task_service
     from app.domain.entities.task import TaskStatus
@@ -644,6 +657,12 @@ async def handle_task_complete_callback(query, context, task_id: str | None) -> 
         await query.edit_message_text("❌ ID de tarea no válido.")
         return
 
+    # Feedback visual inmediato
+    try:
+        await query.edit_message_text("⏳ <b>Completando tarea...</b>", parse_mode="HTML")
+    except Exception:
+        pass
+
     from app.domain.services import get_task_service
 
     service = get_task_service()
@@ -664,6 +683,12 @@ async def handle_task_create_confirm(query, context) -> None:
     """Confirma la creación de una tarea con datos enriquecidos."""
     import re
     from datetime import date
+
+    # Feedback visual inmediato
+    try:
+        await query.edit_message_text("⏳ <b>Creando tarea...</b>", parse_mode="HTML")
+    except Exception:
+        pass
 
     pending = context.user_data.get("pending_task", {})
     title = pending.get("title", "")
@@ -842,13 +867,44 @@ async def handle_task_create_confirm(query, context) -> None:
     subtasks = pending.get("subtasks", [])
     created_subtasks = []
     if subtasks and created.id:
+        # Feedback: creando subtareas
+        try:
+            await query.edit_message_text(
+                f"⏳ <b>Creando subtareas...</b>\n\n"
+                f"Tarea principal creada: <i>{created.title[:50]}</i>",
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
+
+        # Calcular tiempo estimado por subtarea (dividir tiempo total entre subtareas)
+        subtask_minutes = None
+        if estimated_minutes and len(subtasks) > 0:
+            subtask_minutes = max(5, estimated_minutes // len(subtasks))  # Mínimo 5 min por subtarea
+
+        # Determinar complejidad de subtareas (una categoría menor que la principal)
+        subtask_complexity = None
+        if complexity:
+            complexity_downgrade = {
+                TaskComplexity.EPIC: TaskComplexity.HEAVY,
+                TaskComplexity.HEAVY: TaskComplexity.STANDARD,
+                TaskComplexity.STANDARD: TaskComplexity.QUICK,
+                TaskComplexity.QUICK: TaskComplexity.QUICK,
+            }
+            subtask_complexity = complexity_downgrade.get(complexity, TaskComplexity.QUICK)
+
         for subtask_title in subtasks:
             if isinstance(subtask_title, str) and subtask_title.strip():
                 subtask = Task(
                     id="",
                     title=subtask_title.strip(),
                     status=TaskStatus.TODAY,
-                    priority=TaskPriority.NORMAL,
+                    priority=priority,  # Heredar prioridad de la tarea principal
+                    complexity=subtask_complexity,
+                    energy=energy,  # Heredar energía requerida
+                    estimated_minutes=subtask_minutes,
+                    context=task_context,  # Heredar contexto
+                    scheduled_date=scheduled_date,  # Heredar fecha programada
                     parent_task_id=created.id,
                     project_id=project_id,
                     project_name=project_name,
@@ -1182,6 +1238,12 @@ async def handle_task_select_project_created(query, context, project_idx: str | 
         await query.edit_message_text("❌ ID de tarea no válido.")
         return
 
+    # Feedback visual inmediato
+    try:
+        await query.edit_message_text("⏳ <b>Asignando proyecto...</b>", parse_mode="HTML")
+    except Exception:
+        pass
+
     notion = get_notion_service()
 
     # Buscar el task_id completo
@@ -1316,6 +1378,12 @@ async def handle_task_change_project(query, context) -> None:
 async def handle_task_select_project(query, context, project_idx: str | None) -> None:
     """Asigna el proyecto seleccionado a la tarea pendiente."""
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    # Feedback visual inmediato
+    try:
+        await query.edit_message_text("⏳ <b>Asignando proyecto...</b>", parse_mode="HTML")
+    except Exception:
+        pass
 
     pending = context.user_data.get("pending_task", {})
 
