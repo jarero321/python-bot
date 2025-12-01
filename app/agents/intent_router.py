@@ -264,6 +264,9 @@ class IntentRouterAgent(BaseAgent):
             "study_session": UserIntent.STUDY_SESSION,
             "study session": UserIntent.STUDY_SESSION,
             # Planificación
+            "plan_today": UserIntent.PLAN_TODAY,
+            "plan today": UserIntent.PLAN_TODAY,
+            "planificar_hoy": UserIntent.PLAN_TODAY,
             "plan_tomorrow": UserIntent.PLAN_TOMORROW,
             "plan tomorrow": UserIntent.PLAN_TOMORROW,
             "planificar_manana": UserIntent.PLAN_TOMORROW,
