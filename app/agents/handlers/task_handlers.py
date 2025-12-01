@@ -150,11 +150,60 @@ class TaskCreateHandler(BaseIntentHandler):
             "project_match": project_match,
         }
 
-        # Si hay duplicado probable, mostrar advertencia
+        # Si hay duplicado probable, mostrar advertencia CON enriquecimiento
         if duplicate_check.is_duplicate and duplicate_check.confidence > 0.7:
             similar = duplicate_check.similar_tasks[0] if duplicate_check.similar_tasks else None
 
-            keyboard = InlineKeyboardMarkup([
+            # Mostrar prioridad si no es normal
+            priority_str = entities.get("priority", "normal")
+            priority_display = ""
+            if priority_str == "urgent":
+                priority_display = " 🔥"
+            elif priority_str == "high":
+                priority_display = " ⚡"
+            elif priority_str == "low":
+                priority_display = " 🧊"
+
+            msg_parts = [
+                f"⚠️ <b>Posible duplicado detectado</b>\n",
+                f"<b>Nueva:</b> <i>{task_title}</i>{priority_display}\n",
+                f"<b>Similar existente:</b>",
+                f"<i>{similar['title'] if similar else 'N/A'}</i>",
+                f"Similitud: {duplicate_check.confidence:.0%}",
+            ]
+
+            # Mostrar análisis de complejidad (igual que sin duplicado)
+            if complexity:
+                level = complexity.get("level", "standard")
+                minutes = complexity.get("estimated_minutes", 0)
+                energy = complexity.get("energy_required", "medium")
+
+                complexity_emoji = {"quick": "⚡", "standard": "🔄", "heavy": "🏋️", "epic": "🚀"}.get(level, "🔄")
+                energy_emoji = {"deep_work": "🧠", "medium": "💪", "low": "😌"}.get(energy, "💪")
+
+                msg_parts.append(f"\n<b>Análisis:</b>")
+                msg_parts.append(f"{complexity_emoji} Complejidad: {level}")
+                if minutes:
+                    hours = minutes // 60
+                    mins = minutes % 60
+                    time_str = f"{hours}h {mins}m" if hours else f"{mins}m"
+                    msg_parts.append(f"⏱️ Tiempo estimado: {time_str}")
+                msg_parts.append(f"{energy_emoji} Energía: {energy}")
+
+            # Mostrar subtareas sugeridas
+            if subtasks:
+                msg_parts.append(f"\n<b>Subtareas sugeridas:</b>")
+                for i, sub in enumerate(subtasks[:5], 1):
+                    msg_parts.append(f"  {i}. {sub}")
+
+            # Mostrar proyecto relacionado
+            if project_match:
+                msg_parts.append(f"\n📁 <b>Proyecto:</b> {project_match.get('name', 'N/A')}")
+
+            msg_parts.append(f"\n¿Qué deseas hacer?")
+
+            # Construir keyboard con opciones
+            keyboard_buttons = [
                 [
                     InlineKeyboardButton(
                         "✅ Crear de todas formas",
@@ -167,36 +216,25 @@ class TaskCreateHandler(BaseIntentHandler):
                         callback_data=f"task_view:{similar['id']}" if similar else "task_cancel",
                     ),
                 ],
-                [
-                    InlineKeyboardButton(
-                        "❌ Cancelar",
-                        callback_data="task_cancel",
-                    ),
-                ],
+            ]
+
+            # Agregar opciones de subtareas si hay
+            if subtasks:
+                keyboard_buttons.append([
+                    InlineKeyboardButton("📝 Solo tarea principal", callback_data="task_create_no_subtasks"),
+                    InlineKeyboardButton("✏️ Editar subtareas", callback_data="task_edit_subtasks"),
+                ])
+
+            keyboard_buttons.append([
+                InlineKeyboardButton(
+                    "❌ Cancelar",
+                    callback_data="task_cancel",
+                ),
             ])
 
-            # Mostrar prioridad si no es normal
-            priority_str = entities.get("priority", "normal")
-            priority_display = ""
-            if priority_str == "urgent":
-                priority_display = " 🔥"
-            elif priority_str == "high":
-                priority_display = " ⚡"
-            elif priority_str == "low":
-                priority_display = " 🧊"
-
-            message = (
-                f"⚠️ <b>Posible duplicado detectado</b>\n\n"
-                f"<b>Nueva:</b> <i>{task_title}</i>{priority_display}\n\n"
-                f"<b>Similar existente:</b>\n"
-                f"<i>{similar['title'] if similar else 'N/A'}</i>\n"
-                f"Similitud: {duplicate_check.confidence:.0%}\n\n"
-                f"¿Qué deseas hacer?"
-            )
-
             return HandlerResponse(
-                message=message,
-                keyboard=keyboard,
+                message="\n".join(msg_parts),
+                keyboard=InlineKeyboardMarkup(keyboard_buttons),
             )
 
         # Sin duplicado, construir mensaje con enriquecimiento
