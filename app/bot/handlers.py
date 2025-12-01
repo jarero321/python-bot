@@ -324,6 +324,74 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await handle_message_with_registry(update, context)
 
 
+async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handler para mensajes de voz.
+
+    Transcribe el audio usando Gemini y procesa el texto resultante
+    como si fuera un mensaje normal.
+    """
+    from app.services.voice_transcription import get_voice_service
+    from app.core.routing import handle_message_with_registry
+
+    voice = update.message.voice or update.message.audio
+
+    if not voice:
+        await update.message.reply_text("❌ No se pudo procesar el audio.")
+        return
+
+    # Mostrar que estamos procesando
+    processing_msg = await update.message.reply_html(
+        "🎤 <i>Transcribiendo audio...</i>"
+    )
+
+    try:
+        # Descargar el archivo de audio
+        file = await context.bot.get_file(voice.file_id)
+        audio_bytes = await file.download_as_bytearray()
+
+        # Transcribir con Gemini
+        voice_service = get_voice_service()
+        transcription = await voice_service.transcribe_audio(bytes(audio_bytes))
+
+        # Verificar si la transcripción es válida
+        if not transcription or transcription == "[audio vacío]":
+            await processing_msg.edit_text(
+                "🎤 No pude entender el audio. Intenta de nuevo.",
+            )
+            return
+
+        # Mostrar transcripción
+        await processing_msg.edit_text(
+            f"🎤 <b>Transcripción:</b>\n<i>{transcription}</i>\n\n"
+            f"⏳ Procesando...",
+            parse_mode="HTML",
+        )
+
+        # Crear un update falso con el texto transcrito para procesarlo
+        # Guardamos el mensaje original y reemplazamos temporalmente el texto
+        original_text = update.message.text
+        update.message.text = transcription
+
+        # Procesar como mensaje normal
+        await handle_message_with_registry(update, context)
+
+        # Restaurar (aunque ya no se use)
+        update.message.text = original_text
+
+        # Eliminar mensaje de procesamiento
+        try:
+            await processing_msg.delete()
+        except Exception:
+            pass
+
+    except Exception as e:
+        logger.error(f"Error procesando mensaje de voz: {e}")
+        await processing_msg.edit_text(
+            f"❌ Error al procesar el audio: {str(e)[:50]}",
+        )
+
+
 # ==================== CALLBACK HANDLERS ====================
 
 
@@ -1440,6 +1508,14 @@ def setup_handlers(application: Application) -> None:
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
             handle_message,
+        )
+    )
+
+    # Handler para mensajes de voz
+    application.add_handler(
+        MessageHandler(
+            filters.VOICE | filters.AUDIO,
+            handle_voice_message,
         )
     )
 
