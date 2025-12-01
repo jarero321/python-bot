@@ -427,6 +427,19 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         elif action == "task_create_inbox":
             await handle_task_to_inbox(query, context)
 
+        elif action == "task_create_no_subtasks":
+            await handle_task_create_no_subtasks(query, context)
+
+        elif action == "task_edit_subtasks":
+            await handle_task_edit_subtasks(query, context)
+
+        elif action == "task_remove_subtask":
+            subtask_idx = int(parts[1]) if len(parts) > 1 else None
+            await handle_task_remove_subtask(query, context, subtask_idx)
+
+        elif action == "task_back_to_preview":
+            await handle_task_back_to_preview(query, context)
+
         elif action == "task_change_project":
             await handle_task_change_project(query, context)
 
@@ -892,6 +905,155 @@ async def handle_task_create_confirm(query, context) -> None:
     await query.edit_message_text(
         "\n".join(msg_parts),
         parse_mode="HTML",
+    )
+
+
+async def handle_task_create_no_subtasks(query, context) -> None:
+    """Crea la tarea sin subtareas (elimina subtareas del pending)."""
+    pending = context.user_data.get("pending_task", {})
+
+    if not pending:
+        await query.edit_message_text("❌ No hay tarea pendiente.")
+        return
+
+    # Eliminar subtareas del pending
+    pending["subtasks"] = []
+    context.user_data["pending_task"] = pending
+
+    # Crear la tarea sin subtareas
+    await handle_task_create_confirm(query, context)
+
+
+async def handle_task_remove_subtask(query, context, subtask_idx: int | None) -> None:
+    """Elimina una subtarea específica."""
+    pending = context.user_data.get("pending_task", {})
+
+    if not pending or subtask_idx is None:
+        await query.edit_message_text("❌ Error eliminando subtarea.")
+        return
+
+    subtasks = pending.get("subtasks", [])
+
+    if 0 <= subtask_idx < len(subtasks):
+        removed = subtasks.pop(subtask_idx)
+        pending["subtasks"] = subtasks
+        context.user_data["pending_task"] = pending
+        logger.info(f"Subtarea eliminada: {removed}")
+
+    # Volver a mostrar la lista de subtareas
+    await handle_task_edit_subtasks(query, context)
+
+
+async def handle_task_back_to_preview(query, context) -> None:
+    """Vuelve a mostrar el preview de la tarea."""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    pending = context.user_data.get("pending_task", {})
+
+    if not pending:
+        await query.edit_message_text("❌ No hay tarea pendiente.")
+        return
+
+    title = pending.get("title", "Sin título")
+    priority = pending.get("priority", "normal")
+    subtasks = pending.get("subtasks", [])
+    project_match = pending.get("project_match")
+
+    # Reconstruir preview
+    msg_parts = [f"📝 <b>Nueva tarea:</b>\n\n<i>{title}</i>"]
+    msg_parts.append(f"\n⭐ Prioridad: {priority}")
+
+    if subtasks:
+        msg_parts.append(f"\n📋 Subtareas: {len(subtasks)}")
+
+    if project_match:
+        project_name = project_match.get("name", "")
+        msg_parts.append(f"\n📁 Proyecto: {project_name}")
+
+    keyboard_buttons = [
+        [
+            InlineKeyboardButton("✅ Crear tarea", callback_data="task_create_confirm"),
+            InlineKeyboardButton("📥 Inbox", callback_data="task_create_inbox"),
+        ],
+    ]
+
+    if project_match:
+        keyboard_buttons.append([
+            InlineKeyboardButton("📁 Cambiar proyecto", callback_data="task_change_project"),
+        ])
+    else:
+        keyboard_buttons.append([
+            InlineKeyboardButton("📁 Asignar proyecto", callback_data="task_change_project"),
+        ])
+
+    if subtasks:
+        keyboard_buttons.append([
+            InlineKeyboardButton("📝 Solo tarea principal", callback_data="task_create_no_subtasks"),
+            InlineKeyboardButton("✏️ Editar subtareas", callback_data="task_edit_subtasks"),
+        ])
+
+    keyboard_buttons.append([
+        InlineKeyboardButton("❌ Cancelar", callback_data="task_cancel"),
+    ])
+
+    await query.edit_message_text(
+        "\n".join(msg_parts),
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(keyboard_buttons),
+    )
+
+
+async def handle_task_edit_subtasks(query, context) -> None:
+    """Muestra las subtareas para editar/eliminar."""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    pending = context.user_data.get("pending_task", {})
+
+    if not pending:
+        await query.edit_message_text("❌ No hay tarea pendiente.")
+        return
+
+    subtasks = pending.get("subtasks", [])
+
+    if not subtasks:
+        await query.edit_message_text(
+            "📋 No hay subtareas sugeridas para esta tarea.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Volver", callback_data="task_back_to_preview")],
+            ]),
+        )
+        return
+
+    # Mostrar subtareas con opción de eliminar cada una
+    msg_parts = ["📋 <b>Subtareas sugeridas:</b>\n"]
+    keyboard_buttons = []
+
+    for idx, subtask in enumerate(subtasks):
+        if isinstance(subtask, str):
+            msg_parts.append(f"{idx + 1}. {subtask}")
+            keyboard_buttons.append([
+                InlineKeyboardButton(
+                    f"❌ Eliminar: {subtask[:25]}...",
+                    callback_data=f"task_remove_subtask:{idx}",
+                )
+            ])
+
+    msg_parts.append("\n\nSelecciona las subtareas a eliminar:")
+
+    keyboard_buttons.append([
+        InlineKeyboardButton("✅ Confirmar y crear", callback_data="task_create_confirm"),
+    ])
+    keyboard_buttons.append([
+        InlineKeyboardButton("📝 Solo tarea principal", callback_data="task_create_no_subtasks"),
+    ])
+    keyboard_buttons.append([
+        InlineKeyboardButton("⬅️ Volver", callback_data="task_back_to_preview"),
+    ])
+
+    await query.edit_message_text(
+        "\n".join(msg_parts),
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(keyboard_buttons),
     )
 
 

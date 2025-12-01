@@ -277,6 +277,7 @@ class TaskCreateHandler(BaseIntentHandler):
 
         if subtasks:
             keyboard_buttons.append([
+                InlineKeyboardButton("📝 Solo tarea principal", callback_data="task_create_no_subtasks"),
                 InlineKeyboardButton("✏️ Editar subtareas", callback_data="task_edit_subtasks"),
             ])
 
