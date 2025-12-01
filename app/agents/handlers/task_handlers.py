@@ -250,6 +250,11 @@ class TaskCreateHandler(BaseIntentHandler):
             if suggested_dates.get("fecha_due"):
                 msg_parts.append(f"  Deadline: {suggested_dates['fecha_due']}")
 
+        # Mostrar proyecto detectado
+        if project_match:
+            project_name = project_match.get("name", "")
+            msg_parts.append(f"\n\n📁 <b>Proyecto:</b> {project_name}")
+
         msg_parts.append(f"\n\n<i>Confianza: {confidence:.0%}</i>")
 
         # Keyboard con opciones
@@ -259,6 +264,16 @@ class TaskCreateHandler(BaseIntentHandler):
                 InlineKeyboardButton("📥 Inbox", callback_data="task_create_inbox"),
             ],
         ]
+
+        # Botón para editar/cambiar proyecto
+        if project_match:
+            keyboard_buttons.append([
+                InlineKeyboardButton("📁 Cambiar proyecto", callback_data="task_change_project"),
+            ])
+        else:
+            keyboard_buttons.append([
+                InlineKeyboardButton("📁 Asignar proyecto", callback_data="task_change_project"),
+            ])
 
         if subtasks:
             keyboard_buttons.append([

@@ -361,6 +361,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         elif action == "task_create_inbox":
             await handle_task_to_inbox(query, context)
 
+        elif action == "task_change_project":
+            await handle_task_change_project(query, context)
+
+        elif action == "task_select_project":
+            project_id = parts[1] if len(parts) > 1 else None
+            await handle_task_select_project(query, context, project_id)
+
         elif action == "task_view":
             task_id = parts[1] if len(parts) > 1 else None
             await handle_task_view(query, context, task_id)
@@ -788,6 +795,112 @@ async def handle_task_create_confirm(query, context) -> None:
     await query.edit_message_text(
         "\n".join(msg_parts),
         parse_mode="HTML",
+    )
+
+
+async def handle_task_change_project(query, context) -> None:
+    """Muestra lista de proyectos para asignar a la tarea."""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    from app.domain.repositories import get_project_repository
+
+    project_repo = get_project_repository()
+    projects = await project_repo.get_active()
+
+    if not projects:
+        await query.edit_message_text(
+            "📁 No hay proyectos activos.\n\n"
+            "Crea uno primero con: <i>\"crear proyecto X\"</i>",
+            parse_mode="HTML",
+        )
+        return
+
+    # Construir keyboard con proyectos
+    keyboard_buttons = []
+    for project in projects[:8]:  # Máximo 8 proyectos
+        keyboard_buttons.append([
+            InlineKeyboardButton(
+                f"📁 {project.name[:30]}",
+                callback_data=f"task_select_project:{project.id[:8]}",
+            )
+        ])
+
+    # Opción para quitar proyecto
+    keyboard_buttons.append([
+        InlineKeyboardButton("🚫 Sin proyecto", callback_data="task_select_project:none"),
+    ])
+
+    keyboard_buttons.append([
+        InlineKeyboardButton("⬅️ Volver", callback_data="task_back_to_preview"),
+    ])
+
+    await query.edit_message_text(
+        "📁 <b>Selecciona un proyecto:</b>\n\n"
+        "Elige el proyecto al que pertenece esta tarea:",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(keyboard_buttons),
+    )
+
+
+async def handle_task_select_project(query, context, project_id: str | None) -> None:
+    """Asigna el proyecto seleccionado a la tarea pendiente."""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    pending = context.user_data.get("pending_task", {})
+
+    if not pending:
+        await query.edit_message_text("❌ No hay tarea pendiente.")
+        return
+
+    if project_id == "none":
+        # Quitar proyecto
+        pending["project_match"] = None
+        context.user_data["pending_task"] = pending
+
+        await query.edit_message_text(
+            "✅ Proyecto removido de la tarea.\n\n"
+            "Presiona el botón para continuar:",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Crear tarea", callback_data="task_create_confirm")],
+                [InlineKeyboardButton("❌ Cancelar", callback_data="task_cancel")],
+            ]),
+        )
+        return
+
+    # Buscar el proyecto por ID parcial
+    from app.domain.repositories import get_project_repository
+
+    project_repo = get_project_repository()
+    projects = await project_repo.get_active()
+
+    selected_project = None
+    for project in projects:
+        if project.id.startswith(project_id):
+            selected_project = project
+            break
+
+    if not selected_project:
+        await query.edit_message_text("❌ Proyecto no encontrado.")
+        return
+
+    # Actualizar el pending_task con el nuevo proyecto
+    pending["project_match"] = {
+        "id": selected_project.id,
+        "name": selected_project.name,
+        "type": selected_project.type.value if selected_project.type else None,
+    }
+    context.user_data["pending_task"] = pending
+
+    await query.edit_message_text(
+        f"✅ <b>Proyecto asignado:</b> {selected_project.name}\n\n"
+        f"<b>Tarea:</b> <i>{pending.get('title', 'Sin título')}</i>\n\n"
+        "Presiona el botón para crear la tarea:",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Crear tarea", callback_data="task_create_confirm")],
+            [InlineKeyboardButton("📁 Cambiar proyecto", callback_data="task_change_project")],
+            [InlineKeyboardButton("❌ Cancelar", callback_data="task_cancel")],
+        ]),
     )
 
 
