@@ -858,23 +858,26 @@ async def handle_task_create_confirm(query, context) -> None:
     }
 
     # Guardar en ConversationContext para que el router pueda hacer referencia
-    from app.agents.conversation_context import get_conversation_store, EntityType
-    # Obtener user_id del query (callback query tiene from_user)
-    user_id = query.from_user.id if query.from_user else None
-    if user_id:
-        conv_store = get_conversation_store()
-        conv_ctx = conv_store.get(user_id)
-        conv_ctx.set_active_entity(
-            entity_type=EntityType.TASK,
-            entity_id=created.id,
-            entity_name=created.title,
-            entity_data={
-                "project_id": project_id,
-                "project_name": project_name,
-                "priority": str(priority.value) if priority else "normal",
-            }
-        )
-        conv_store.save(conv_ctx)
+    try:
+        from app.agents.conversation_context import get_conversation_store, EntityType
+        # Obtener user_id del query (callback query tiene from_user)
+        user_id = query.from_user.id if query.from_user else None
+        if user_id:
+            conv_store = get_conversation_store()
+            conv_ctx = conv_store.get(user_id)
+            conv_ctx.set_active_entity(
+                entity_type=EntityType.TASK,
+                entity_id=created.id,
+                entity_name=created.title,
+                entity_data={
+                    "project_id": project_id,
+                    "project_name": project_name,
+                    "priority": str(priority.value) if priority else "normal",
+                }
+            )
+            conv_store.save(conv_ctx)
+    except Exception as e:
+        logger.warning(f"Error guardando contexto de conversación: {e}")
 
     # Construir mensaje de confirmación con detalles
     msg_parts = [
