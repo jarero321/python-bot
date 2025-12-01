@@ -26,7 +26,7 @@ class VoiceTranscriptionService:
     def _ensure_configured(self):
         """Configura el cliente de Gemini si no está configurado."""
         if not self._configured:
-            genai.configure(api_key=settings.GEMINI_API_KEY)
+            genai.configure(api_key=settings.gemini_api_key)
             # Usar modelo flash para transcripción (más rápido)
             self._model = genai.GenerativeModel("gemini-2.0-flash-exp")
             self._configured = True
