@@ -234,9 +234,14 @@ async def handle_message_with_registry(
     processing_msg = None
 
     try:
-        text = update.message.text
+        # Usar transcripción de voz si existe, sino el texto del mensaje
+        text = context.user_data.get("voice_transcription") or update.message.text
         user = update.effective_user
         user_id = user.id
+
+        if not text:
+            logger.warning(f"Mensaje vacío de {user_id}")
+            return
 
         logger.info(f"Mensaje de {user_id}: {text[:50]}...")
 

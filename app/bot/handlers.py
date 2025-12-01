@@ -368,16 +368,14 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
             parse_mode="HTML",
         )
 
-        # Crear un update falso con el texto transcrito para procesarlo
-        # Guardamos el mensaje original y reemplazamos temporalmente el texto
-        original_text = update.message.text
-        update.message.text = transcription
+        # Guardar transcripción en contexto para que el dispatcher la use
+        context.user_data["voice_transcription"] = transcription
 
-        # Procesar como mensaje normal
+        # Procesar como mensaje normal (el dispatcher leerá voice_transcription)
         await handle_message_with_registry(update, context)
 
-        # Restaurar (aunque ya no se use)
-        update.message.text = original_text
+        # Limpiar transcripción del contexto
+        context.user_data.pop("voice_transcription", None)
 
         # Eliminar mensaje de procesamiento
         try:
