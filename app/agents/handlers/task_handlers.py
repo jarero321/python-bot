@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 # ==================== Helpers ====================
 
-def format_task_line(task: Task) -> str:
+def format_task_line(task: Task, is_subtask: bool = False) -> str:
     """Formatea una tarea para mostrar en lista."""
     status_emoji = {
         TaskStatus.BACKLOG: "⬜",
@@ -49,12 +49,62 @@ def format_task_line(task: Task) -> str:
 
     overdue = " ⚠️" if task.is_overdue else ""
 
-    return f"{status_emoji} {priority_indicator}{task.title}{overdue}"
+    # Indentación para subtareas
+    prefix = "  └─ " if is_subtask else ""
+
+    return f"{prefix}{status_emoji} {priority_indicator}{task.title}{overdue}"
+
+
+def group_tasks_with_subtasks(tasks: list[Task]) -> list[tuple[Task, list[Task]]]:
+    """
+    Agrupa tareas: retorna lista de (tarea_padre, [subtareas]).
+    Las tareas sin padre van con lista vacía.
+    Las subtareas se agrupan bajo su tarea padre.
+    """
+    # Separar tareas padre y subtareas
+    parent_tasks = {}  # id -> task
+    subtasks_by_parent = {}  # parent_id -> [subtasks]
+    orphan_subtasks = []  # Subtareas cuyo padre no está en la lista
+
+    for task in tasks:
+        if task.parent_task_id:
+            # Es una subtarea
+            if task.parent_task_id not in subtasks_by_parent:
+                subtasks_by_parent[task.parent_task_id] = []
+            subtasks_by_parent[task.parent_task_id].append(task)
+        else:
+            # Es tarea padre o independiente
+            parent_tasks[task.id] = task
+
+    result = []
+    processed_parent_ids = set()
+
+    # Primero, agregar tareas padre con sus subtareas
+    for task_id, task in parent_tasks.items():
+        subtasks = subtasks_by_parent.get(task_id, [])
+        result.append((task, subtasks))
+        processed_parent_ids.add(task_id)
+
+    # Agregar subtareas huérfanas (su padre no está en la lista actual)
+    for parent_id, subtasks in subtasks_by_parent.items():
+        if parent_id not in processed_parent_ids:
+            for subtask in subtasks:
+                orphan_subtasks.append(subtask)
+
+    # Agregar subtareas huérfanas como tareas independientes con indicador
+    for subtask in orphan_subtasks:
+        result.append((subtask, []))
+
+    return result
 
 
 def format_task_detail(task: Task) -> str:
     """Formatea detalles completos de una tarea."""
     lines = [f"<b>{task.title}</b>"]
+
+    # Indicar si es subtarea
+    if task.parent_task_id:
+        lines.append("<i>(Subtarea)</i>")
 
     status_names = {
         TaskStatus.BACKLOG: "📥 Backlog",
@@ -92,6 +142,14 @@ def format_task_detail(task: Task) -> str:
 
     if task.context:
         lines.append(f"🏷️ {task.context}")
+
+    # Mostrar notas/contexto si existe (especialmente útil para subtareas)
+    if task.notes:
+        # Mostrar solo las primeras líneas si es muy largo
+        notes_preview = task.notes[:150]
+        if len(task.notes) > 150:
+            notes_preview += "..."
+        lines.append(f"\n📝 <i>{notes_preview}</i>")
 
     return "\n".join(lines)
 
@@ -389,30 +447,45 @@ class TaskQueryHandler(BaseIntentHandler):
         # Formatear tareas usando entidades del dominio
         lines = ["📋 <b>Tareas de hoy</b>\n"]
 
-        # Agrupar por estado
-        doing = [t for t in tasks if t.status == TaskStatus.DOING]
-        pending = [t for t in tasks if t.status in (TaskStatus.TODAY, TaskStatus.PLANNED)]
-        paused = [t for t in tasks if t.status == TaskStatus.PAUSED]
+        # Agrupar tareas padre con subtareas
+        grouped = group_tasks_with_subtasks(tasks)
 
-        if doing:
+        # Separar por estado (solo tareas padre/independientes para la agrupación)
+        def format_grouped_tasks(task_list: list[tuple[Task, list[Task]]]) -> list[str]:
+            """Formatea tareas agrupadas con sus subtareas."""
+            result = []
+            for task, subtasks in task_list:
+                result.append(format_task_line(task, is_subtask=bool(task.parent_task_id)))
+                for subtask in subtasks:
+                    result.append(format_task_line(subtask, is_subtask=True))
+            return result
+
+        # Filtrar por estado
+        doing_grouped = [(t, subs) for t, subs in grouped if t.status == TaskStatus.DOING]
+        pending_grouped = [(t, subs) for t, subs in grouped if t.status in (TaskStatus.TODAY, TaskStatus.PLANNED)]
+        paused_grouped = [(t, subs) for t, subs in grouped if t.status == TaskStatus.PAUSED]
+
+        if doing_grouped:
             lines.append("\n<b>⚡ En progreso:</b>")
-            for task in doing:
-                lines.append(format_task_line(task))
+            lines.extend(format_grouped_tasks(doing_grouped))
 
-        if pending:
+        if pending_grouped:
             lines.append("\n<b>🎯 Pendientes:</b>")
-            for task in pending:
-                lines.append(format_task_line(task))
+            lines.extend(format_grouped_tasks(pending_grouped))
 
-        if paused:
+        if paused_grouped:
             lines.append("\n<b>⏸️ Pausadas:</b>")
-            for task in paused:
-                lines.append(format_task_line(task))
+            lines.extend(format_grouped_tasks(paused_grouped))
 
         # Resumen
         total = len(tasks)
         done_count = len([t for t in tasks if t.status == TaskStatus.DONE])
+        parent_count = len([t for t, _ in grouped if not t.parent_task_id])
+        subtask_count = sum(len(subs) for _, subs in grouped)
+
         lines.append(f"\n📊 {done_count}/{total} completadas")
+        if subtask_count > 0:
+            lines.append(f"<i>({parent_count} tareas principales, {subtask_count} subtareas)</i>")
 
         return HandlerResponse(message="\n".join(lines))
 

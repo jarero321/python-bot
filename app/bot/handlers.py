@@ -895,6 +895,11 @@ async def handle_task_create_confirm(query, context) -> None:
 
         for subtask_title in subtasks:
             if isinstance(subtask_title, str) and subtask_title.strip():
+                # Crear nota con contexto de la tarea padre
+                subtask_notes = f"Subtarea de: {created.title}"
+                if notes:
+                    subtask_notes += f"\n\nContexto: {notes}"
+
                 subtask = Task(
                     id="",
                     title=subtask_title.strip(),
@@ -905,6 +910,8 @@ async def handle_task_create_confirm(query, context) -> None:
                     estimated_minutes=subtask_minutes,
                     context=task_context,  # Heredar contexto
                     scheduled_date=scheduled_date,  # Heredar fecha programada
+                    due_date=due_date,  # Heredar deadline de la tarea principal
+                    notes=subtask_notes,  # Contexto de la tarea padre
                     parent_task_id=created.id,
                     project_id=project_id,
                     project_name=project_name,
