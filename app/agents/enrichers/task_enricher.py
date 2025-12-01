@@ -140,6 +140,15 @@ class TaskEnricher(BaseEnricher):
                 result.suggested_dates["fecha_due"],
             )
 
+        # 7. Detectar proyecto relacionado
+        try:
+            project_match = await self._find_related_project(message, task_title)
+            if project_match:
+                result.project_match = project_match
+                result.agents_used.append("ProjectMatcher")
+        except Exception as e:
+            self.logger.warning(f"Error detectando proyecto: {e}")
+
         return result
 
     def _calculate_urgency_score(self, message: str) -> int:
@@ -222,3 +231,59 @@ class TaskEnricher(BaseEnricher):
             logger.warning(f"Error generando recordatorios: {e}")
 
         return reminders
+
+    async def _find_related_project(
+        self,
+        message: str,
+        task_title: str,
+    ) -> dict[str, Any] | None:
+        """
+        Detecta si la tarea está relacionada con algún proyecto activo.
+
+        Busca coincidencias entre el mensaje/título y los nombres de proyectos.
+        """
+        from app.domain.repositories import get_project_repository
+
+        try:
+            project_repo = get_project_repository()
+            active_projects = await project_repo.get_active()
+
+            if not active_projects:
+                return None
+
+            # Combinar mensaje y título para búsqueda
+            search_text = f"{message} {task_title}".lower()
+
+            # Buscar coincidencias con nombres de proyectos
+            for project in active_projects:
+                project_name_lower = project.name.lower()
+
+                # Coincidencia exacta del nombre
+                if project_name_lower in search_text:
+                    return {
+                        "id": project.id,
+                        "name": project.name,
+                        "type": project.type.value if project.type else None,
+                    }
+
+                # Coincidencia de palabras clave del proyecto
+                project_words = set(project_name_lower.split())
+                search_words = set(search_text.split())
+
+                # Si al menos 2 palabras coinciden (para proyectos con nombres largos)
+                common_words = project_words & search_words
+                # Filtrar palabras comunes muy cortas o genéricas
+                common_words = {w for w in common_words if len(w) > 3}
+
+                if len(common_words) >= 2:
+                    return {
+                        "id": project.id,
+                        "name": project.name,
+                        "type": project.type.value if project.type else None,
+                    }
+
+            return None
+
+        except Exception as e:
+            logger.warning(f"Error buscando proyecto relacionado: {e}")
+            return None

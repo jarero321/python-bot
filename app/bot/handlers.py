@@ -691,6 +691,25 @@ async def handle_task_create_confirm(query, context) -> None:
         except (ValueError, TypeError):
             pass
 
+    # Extraer proyecto relacionado del enriquecimiento
+    project_match = pending.get("project_match")
+    project_id = None
+    project_name = None
+
+    if project_match:
+        # Si ya tenemos el ID del proyecto, usarlo directamente
+        project_id = project_match.get("id")
+        project_name = project_match.get("name")
+
+        # Si solo tenemos el nombre, buscar el ID
+        if not project_id and project_name:
+            from app.domain.repositories import get_project_repository
+            project_repo = get_project_repository()
+            project = await project_repo.find_by_name(project_name)
+            if project:
+                project_id = project.id
+                project_name = project.name
+
     # Crear tarea con todos los datos enriquecidos
     service = get_task_service()
     new_task = Task(
@@ -707,6 +726,8 @@ async def handle_task_create_confirm(query, context) -> None:
         due_date=due_date,
         context=task_context,
         source="telegram",
+        project_id=project_id,
+        project_name=project_name,
     )
     created, _ = await service.create(new_task, check_duplicates=False)
 
@@ -760,6 +781,9 @@ async def handle_task_create_confirm(query, context) -> None:
         mins = estimated_minutes % 60
         time_str = f"{hours}h {mins}m" if hours else f"{mins}m"
         msg_parts.append(f"⏱️ Tiempo est: {time_str}")
+
+    if project_name:
+        msg_parts.append(f"📁 Proyecto: {project_name}")
 
     await query.edit_message_text(
         "\n".join(msg_parts),

@@ -19,7 +19,21 @@ async def morning_briefing_job() -> None:
     - Generar plan con MorningPlannerAgent
     - Incluir contexto de tareas y hábitos
     - Mensaje personalizado según el día
+
+    Solo se ejecuta en horario laboral (6:00 - 18:00) de lunes a viernes.
     """
+    now = datetime.now()
+
+    # Validar día laboral (lunes=0 a viernes=4)
+    if now.weekday() > 4:
+        logger.info(f"Morning briefing omitido - es fin de semana ({now.strftime('%A')})")
+        return
+
+    # Validar horario (6:00 - 18:00)
+    if now.hour < 6 or now.hour >= 18:
+        logger.info(f"Morning briefing omitido - fuera del horario ({now.hour}:00)")
+        return
+
     logger.info("Ejecutando Morning Briefing...")
 
     telegram = get_telegram_service()

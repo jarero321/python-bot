@@ -292,3 +292,42 @@ class NotionProjectRepository(IProjectRepository):
     async def complete(self, id: str) -> Project | None:
         """Marca un proyecto como completado."""
         return await self.update_status(id, ProjectStatus.COMPLETED)
+
+    async def find_by_name(self, name: str) -> Project | None:
+        """
+        Busca un proyecto por nombre (exacto o parcial).
+
+        Args:
+            name: Nombre del proyecto a buscar
+
+        Returns:
+            Project si se encuentra, None si no existe
+        """
+        try:
+            all_projects = await self.get_active()
+
+            if not name:
+                return None
+
+            name_lower = name.lower().strip()
+
+            # Búsqueda exacta primero
+            for project in all_projects:
+                if project.name.lower() == name_lower:
+                    return project
+
+            # Búsqueda parcial (el nombre está contenido en el proyecto)
+            for project in all_projects:
+                if name_lower in project.name.lower():
+                    return project
+
+            # Búsqueda inversa (el proyecto está contenido en el nombre)
+            for project in all_projects:
+                if project.name.lower() in name_lower:
+                    return project
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Error buscando proyecto por nombre '{name}': {e}")
+            return None

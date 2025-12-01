@@ -38,7 +38,167 @@ def format_task_for_plan(task: Task) -> str:
     return f"{priority_icon} {task.title}"
 
 
+# ==================== Helpers ====================
+
+def is_working_hours() -> tuple[bool, str]:
+    """
+    Verifica si estamos en horario laboral.
+    Retorna (is_working, message).
+    """
+    from datetime import datetime
+
+    now = datetime.now()
+
+    # Fin de semana
+    if now.weekday() > 4:
+        return False, "Es fin de semana. El horario laboral es de lunes a viernes."
+
+    # Fuera de horario (9:00 - 18:00)
+    if now.hour < 9:
+        return False, f"Aún no es horario laboral (son las {now.hour}:{now.minute:02d}). El horario comienza a las 9:00."
+
+    if now.hour >= 18:
+        return False, f"Ya terminó el horario laboral (son las {now.hour}:{now.minute:02d}). El horario es hasta las 18:00."
+
+    return True, ""
+
+
 # ==================== Handlers ====================
+
+@intent_handler(UserIntent.PLAN_TODAY)
+class PlanTodayHandler(BaseIntentHandler):
+    """Handler para planificar el día de hoy."""
+
+    name = "PlanTodayHandler"
+    intents = [UserIntent.PLAN_TODAY]
+
+    def __init__(self, task_repo: ITaskRepository | None = None):
+        super().__init__()
+        self._task_repo = task_repo or get_task_repository()
+
+    async def handle(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        intent_result: Any,
+    ) -> HandlerResponse:
+        from datetime import datetime
+        from app.agents.orchestrator import get_orchestrator
+
+        # Validar horario laboral
+        is_working, reason = is_working_hours()
+        if not is_working:
+            return HandlerResponse(
+                message=f"⏰ <b>Fuera de horario laboral</b>\n\n{reason}\n\n💡 Puedes usar <i>\"planifica mañana\"</i> para preparar el día siguiente.",
+            )
+
+        text = self.get_raw_message(intent_result)
+
+        # Mostrar procesamiento
+        processing_msg = await update.message.reply_html(
+            "📅 <b>Planificando tu día...</b>\n\n"
+            "⏳ Analizando tareas pendientes y prioridades..."
+        )
+
+        try:
+            orchestrator = get_orchestrator()
+
+            # Obtener tareas de hoy
+            today_tasks = await self._task_repo.get_for_today()
+
+            if not today_tasks:
+                # No hay tareas, ofrecer generar plan
+                pending_tasks = await self._task_repo.get_pending(limit=10)
+
+                if not pending_tasks:
+                    await processing_msg.edit_text(
+                        "📭 <b>Sin tareas pendientes</b>\n\n"
+                        "No tienes tareas para hoy ni pendientes.\n\n"
+                        "💡 Puedes crear una tarea con:\n"
+                        "<i>\"Tengo que hacer X\"</i>",
+                        parse_mode="HTML",
+                    )
+                    return HandlerResponse(
+                        message="Sin tareas pendientes",
+                        already_sent=True,
+                    )
+
+                # Hay tareas pendientes pero ninguna para hoy
+                keyboard = InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton(
+                            "📋 Asignar tareas a hoy",
+                            callback_data="assign_tasks_today",
+                        ),
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "🌅 Generar plan automático",
+                            callback_data="generate_today_plan",
+                        ),
+                    ],
+                ])
+
+                pending_list = "\n".join([f"  • {format_task_for_plan(t)}" for t in pending_tasks[:5]])
+
+                await processing_msg.edit_text(
+                    f"📅 <b>Planificar Hoy</b>\n\n"
+                    f"No tienes tareas asignadas para hoy.\n\n"
+                    f"<b>Tareas pendientes disponibles:</b>\n{pending_list}\n\n"
+                    f"¿Qué quieres hacer?",
+                    parse_mode="HTML",
+                    reply_markup=keyboard,
+                )
+
+                return HandlerResponse(
+                    message="Ofrecer asignar tareas",
+                    already_sent=True,
+                )
+
+            # Hay tareas para hoy, generar plan con AI
+            provider = get_llm_provider()
+            provider.ensure_configured()
+
+            with provider.for_task("morning_planning"):
+                plan = await orchestrator.generate_morning_plan()
+
+            # Formatear respuesta
+            now = datetime.now()
+            response = f"📅 <b>Tu plan para hoy</b>\n"
+            response += f"<i>{now.strftime('%A %d de %B')}</i>\n\n"
+
+            message = orchestrator.morning_planner.format_telegram_message(plan)
+
+            # Agregar resumen de carga
+            workload = await orchestrator.get_workload_summary()
+            if workload.get("overdue", 0) > 0:
+                message += f"\n\n⚠️ <b>Atrasadas:</b> {workload['overdue']} tareas"
+
+            await processing_msg.edit_text(
+                message,
+                parse_mode="HTML",
+            )
+
+            return HandlerResponse(
+                message=message,
+                already_sent=True,
+            )
+
+        except Exception as e:
+            logger.error(f"Error en planificación de hoy: {e}")
+            try:
+                await processing_msg.edit_text(
+                    "❌ Error al planificar. Intenta de nuevo.",
+                    parse_mode="HTML",
+                )
+            except Exception:
+                pass
+            return HandlerResponse(
+                message="❌ Error al planificar.",
+                success=False,
+                already_sent=True,
+            )
+
 
 @intent_handler(UserIntent.PLAN_TOMORROW)
 class PlanTomorrowHandler(BaseIntentHandler):

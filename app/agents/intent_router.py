@@ -31,6 +31,7 @@ class UserIntent(str, Enum):
     REMINDER_QUERY = "reminder_query"    # Consultar recordatorios
 
     # Planificación
+    PLAN_TODAY = "plan_today"            # Planificar hoy
     PLAN_TOMORROW = "plan_tomorrow"      # Planificar mañana
     PLAN_WEEK = "plan_week"              # Ver/planificar semana
     PRIORITIZE = "prioritize"            # Ayuda a priorizar tareas
@@ -83,7 +84,8 @@ class ClassifyIntent(dspy.Signature):
         - note: quiere guardar una nota o información
         - reminder_create: quiere crear un RECORDATORIO (ej: "recuérdame X", "ponme un recordatorio")
         - reminder_query: pregunta sobre sus recordatorios
-        - plan_tomorrow: quiere planificar mañana (ej: "qué hago mañana", "planifica mi día")
+        - plan_today: quiere planificar HOY (ej: "planifica mi día", "qué hago hoy", "organiza mi día", "ayúdame a planificar")
+        - plan_tomorrow: quiere planificar MAÑANA específicamente (ej: "qué hago mañana", "planifica mañana")
         - plan_week: quiere ver o planificar su semana (ej: "cómo va mi semana", "qué tengo esta semana")
         - prioritize: necesita ayuda para priorizar entre tareas (ej: "qué hago primero", "X o Y primero")
         - reschedule: quiere mover/reprogramar una tarea (ej: "mueve X para mañana", "necesito más tiempo")

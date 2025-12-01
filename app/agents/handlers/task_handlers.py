@@ -133,6 +133,9 @@ class TaskCreateHandler(BaseIntentHandler):
         # Verificar duplicados con RAG
         duplicate_check = await self._service.check_duplicate(task_title)
 
+        # Obtener proyecto relacionado del enriquecimiento
+        project_match = entities.get("_project")
+
         # Guardar en context para cuando confirme (incluir enriquecimiento)
         context.user_data["pending_task"] = {
             "title": task_title,
@@ -144,6 +147,7 @@ class TaskCreateHandler(BaseIntentHandler):
             "subtasks": subtasks,
             "blockers": blockers,
             "reminders": reminders,
+            "project_match": project_match,
         }
 
         # Si hay duplicado probable, mostrar advertencia
