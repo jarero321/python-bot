@@ -443,9 +443,18 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         elif action == "task_change_project":
             await handle_task_change_project(query, context)
 
+        elif action == "task_change_project_created":
+            task_id = parts[1] if len(parts) > 1 else None
+            await handle_task_change_project_created(query, context, task_id)
+
         elif action == "task_select_project":
             project_id = parts[1] if len(parts) > 1 else None
             await handle_task_select_project(query, context, project_id)
+
+        elif action == "task_select_project_created":
+            project_idx = parts[1] if len(parts) > 1 else None
+            task_id = parts[2] if len(parts) > 2 else None
+            await handle_task_select_project_created(query, context, project_idx, task_id)
 
         elif action == "task_view":
             task_id = parts[1] if len(parts) > 1 else None
@@ -839,8 +848,14 @@ async def handle_task_create_confirm(query, context) -> None:
                 except Exception as e:
                     logger.warning(f"Error creando subtarea '{subtask_title}': {e}")
 
-    # Limpiar pending
+    # Limpiar pending pero guardar la tarea creada para acciones de seguimiento
     context.user_data.pop("pending_task", None)
+    context.user_data["last_created_task"] = {
+        "id": created.id,
+        "title": created.title,
+        "project_id": project_id,
+        "project_name": project_name,
+    }
 
     # Construir mensaje de confirmación con detalles
     msg_parts = [
@@ -902,9 +917,21 @@ async def handle_task_create_confirm(query, context) -> None:
         if len(created_subtasks) > 5:
             msg_parts.append(f"  ... y {len(created_subtasks) - 5} más")
 
+    # Botones de acciones de seguimiento
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    task_id_short = created.id[:8] if created.id else ""
+    keyboard_buttons = [
+        [
+            InlineKeyboardButton("▶️ Empezar ahora", callback_data=f"task_doing:{task_id_short}"),
+            InlineKeyboardButton("📁 Cambiar proyecto", callback_data=f"task_change_project_created:{task_id_short}"),
+        ],
+    ]
+
     await query.edit_message_text(
         "\n".join(msg_parts),
         parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(keyboard_buttons),
     )
 
 
@@ -1055,6 +1082,131 @@ async def handle_task_edit_subtasks(query, context) -> None:
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(keyboard_buttons),
     )
+
+
+async def handle_task_change_project_created(query, context, task_id: str | None) -> None:
+    """Muestra lista de proyectos para cambiar en una tarea ya creada."""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    from app.services.notion import get_notion_service
+
+    if not task_id:
+        await query.edit_message_text("❌ ID de tarea no válido.")
+        return
+
+    # Guardar task_id para cuando seleccione el proyecto
+    context.user_data["changing_project_for_task"] = task_id
+
+    notion = get_notion_service()
+    raw_projects = await notion.get_projects(active_only=True, use_cache=False)
+
+    if not raw_projects:
+        await query.edit_message_text("📁 No hay proyectos activos.")
+        return
+
+    # Parsear proyectos
+    parsed_projects = []
+    for raw_project in raw_projects[:8]:
+        try:
+            title_prop = raw_project.get("properties", {}).get("Proyecto", {})
+            title_list = title_prop.get("title", [])
+            project_name = title_list[0].get("plain_text", "Sin nombre") if title_list else "Sin nombre"
+            project_id = raw_project.get("id", "")
+        except (KeyError, IndexError):
+            project_name = "Sin nombre"
+            project_id = raw_project.get("id", "")
+
+        parsed_projects.append({"id": project_id, "name": project_name})
+
+    context.user_data["available_projects"] = parsed_projects
+
+    # Construir keyboard
+    keyboard_buttons = []
+    for idx, project in enumerate(parsed_projects):
+        keyboard_buttons.append([
+            InlineKeyboardButton(
+                f"📁 {project['name'][:30]}",
+                callback_data=f"task_select_project_created:{idx}:{task_id}",
+            )
+        ])
+
+    keyboard_buttons.append([
+        InlineKeyboardButton("🚫 Sin proyecto", callback_data=f"task_select_project_created:none:{task_id}"),
+    ])
+
+    await query.edit_message_text(
+        "📁 <b>Selecciona un proyecto:</b>",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(keyboard_buttons),
+    )
+
+
+async def handle_task_select_project_created(query, context, project_idx: str | None, task_id: str | None) -> None:
+    """Asigna proyecto a una tarea ya creada."""
+    from app.services.notion import get_notion_service
+
+    if not task_id:
+        await query.edit_message_text("❌ ID de tarea no válido.")
+        return
+
+    notion = get_notion_service()
+
+    # Buscar el task_id completo
+    tasks_today = await notion.get_tasks_for_today(use_cache=False)
+    full_task_id = None
+    task_title = ""
+
+    for task in tasks_today:
+        tid = task.get("id", "")
+        if tid.startswith(task_id):
+            full_task_id = tid
+            title_prop = task.get("properties", {}).get("Tarea", {})
+            title_list = title_prop.get("title", [])
+            task_title = title_list[0].get("plain_text", "") if title_list else ""
+            break
+
+    if not full_task_id:
+        await query.edit_message_text("❌ Tarea no encontrada.")
+        return
+
+    project_id = None
+    project_name = "Sin proyecto"
+
+    if project_idx != "none":
+        available_projects = context.user_data.get("available_projects", [])
+        try:
+            idx = int(project_idx)
+            if 0 <= idx < len(available_projects):
+                project_id = available_projects[idx]["id"]
+                project_name = available_projects[idx]["name"]
+        except (ValueError, TypeError):
+            pass
+
+    # Actualizar la tarea en Notion
+    try:
+        if project_id:
+            await notion.client.pages.update(
+                page_id=full_task_id,
+                properties={
+                    "Proyecto": {"relation": [{"id": project_id}]}
+                }
+            )
+        else:
+            await notion.client.pages.update(
+                page_id=full_task_id,
+                properties={
+                    "Proyecto": {"relation": []}
+                }
+            )
+
+        await query.edit_message_text(
+            f"✅ <b>Proyecto actualizado</b>\n\n"
+            f"<i>{task_title}</i>\n"
+            f"📁 {project_name}",
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        logger.error(f"Error actualizando proyecto: {e}")
+        await query.edit_message_text("❌ Error actualizando el proyecto.")
 
 
 async def handle_task_change_project(query, context) -> None:
