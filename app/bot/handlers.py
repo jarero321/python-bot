@@ -916,23 +916,37 @@ async def handle_task_change_project(query, context) -> None:
         )
         return
 
-    # Construir keyboard con proyectos (extraer nombre e ID de la estructura de Notion)
-    keyboard_buttons = []
+    # Parsear proyectos y guardar en contexto para selección posterior
+    parsed_projects = []
     for raw_project in raw_projects[:8]:  # Máximo 8 proyectos
-        # Extraer nombre del proyecto de la estructura de Notion
         try:
             title_prop = raw_project.get("properties", {}).get("Proyecto", {})
             title_list = title_prop.get("title", [])
             project_name = title_list[0].get("plain_text", "Sin nombre") if title_list else "Sin nombre"
             project_id = raw_project.get("id", "")
+            tipo_prop = raw_project.get("properties", {}).get("Tipo", {})
+            project_type = tipo_prop.get("select", {}).get("name") if tipo_prop.get("select") else None
         except (KeyError, IndexError):
             project_name = "Sin nombre"
             project_id = raw_project.get("id", "")
+            project_type = None
 
+        parsed_projects.append({
+            "id": project_id,
+            "name": project_name,
+            "type": project_type,
+        })
+
+    # Guardar proyectos en contexto para usar en handle_task_select_project
+    context.user_data["available_projects"] = parsed_projects
+
+    # Construir keyboard usando índice numérico (evita colisión de IDs)
+    keyboard_buttons = []
+    for idx, project in enumerate(parsed_projects):
         keyboard_buttons.append([
             InlineKeyboardButton(
-                f"📁 {project_name[:30]}",
-                callback_data=f"task_select_project:{project_id[:8]}",
+                f"📁 {project['name'][:30]}",
+                callback_data=f"task_select_project:{idx}",
             )
         ])
 
@@ -953,7 +967,7 @@ async def handle_task_change_project(query, context) -> None:
     )
 
 
-async def handle_task_select_project(query, context, project_id: str | None) -> None:
+async def handle_task_select_project(query, context, project_idx: str | None) -> None:
     """Asigna el proyecto seleccionado a la tarea pendiente."""
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -963,7 +977,7 @@ async def handle_task_select_project(query, context, project_id: str | None) -> 
         await query.edit_message_text("❌ No hay tarea pendiente.")
         return
 
-    if project_id == "none":
+    if project_idx == "none":
         # Quitar proyecto
         pending["project_match"] = None
         context.user_data["pending_task"] = pending
@@ -979,32 +993,18 @@ async def handle_task_select_project(query, context, project_id: str | None) -> 
         )
         return
 
-    # Buscar el proyecto por ID parcial (sin cache para datos frescos)
-    from app.services.notion import get_notion_service
+    # Obtener proyecto del contexto usando el índice
+    available_projects = context.user_data.get("available_projects", [])
 
-    notion = get_notion_service()
-    raw_projects = await notion.get_projects(active_only=True, use_cache=False)
-
-    selected_project = None
-    for raw_project in raw_projects:
-        full_id = raw_project.get("id", "")
-        if full_id.startswith(project_id):
-            try:
-                title_prop = raw_project.get("properties", {}).get("Proyecto", {})
-                title_list = title_prop.get("title", [])
-                project_name = title_list[0].get("plain_text", "Sin nombre") if title_list else "Sin nombre"
-                tipo_prop = raw_project.get("properties", {}).get("Tipo", {})
-                project_type = tipo_prop.get("select", {}).get("name") if tipo_prop.get("select") else None
-            except (KeyError, IndexError):
-                project_name = "Sin nombre"
-                project_type = None
-
-            selected_project = {
-                "id": full_id,
-                "name": project_name,
-                "type": project_type,
-            }
-            break
+    try:
+        idx = int(project_idx)
+        if idx < 0 or idx >= len(available_projects):
+            await query.edit_message_text("❌ Proyecto no válido.")
+            return
+        selected_project = available_projects[idx]
+    except (ValueError, TypeError):
+        await query.edit_message_text("❌ Índice de proyecto no válido.")
+        return
 
     if not selected_project:
         await query.edit_message_text("❌ Proyecto no encontrado.")
