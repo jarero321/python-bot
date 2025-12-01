@@ -869,12 +869,15 @@ async def handle_task_create_confirm(query, context) -> None:
 async def handle_task_change_project(query, context) -> None:
     """Muestra lista de proyectos para asignar a la tarea."""
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-    from app.domain.repositories import get_project_repository
+    from app.services.notion import get_notion_service
 
-    project_repo = get_project_repository()
-    projects = await project_repo.get_active()
+    # Usar NotionService directamente sin caché para obtener todos los proyectos
+    notion = get_notion_service()
+    raw_projects = await notion.get_projects(active_only=True, use_cache=False)
 
-    if not projects:
+    logger.info(f"Proyectos activos encontrados: {len(raw_projects)}")
+
+    if not raw_projects:
         await query.edit_message_text(
             "📁 No hay proyectos activos.\n\n"
             "Crea uno primero con: <i>\"crear proyecto X\"</i>",
@@ -882,13 +885,23 @@ async def handle_task_change_project(query, context) -> None:
         )
         return
 
-    # Construir keyboard con proyectos
+    # Construir keyboard con proyectos (extraer nombre e ID de la estructura de Notion)
     keyboard_buttons = []
-    for project in projects[:8]:  # Máximo 8 proyectos
+    for raw_project in raw_projects[:8]:  # Máximo 8 proyectos
+        # Extraer nombre del proyecto de la estructura de Notion
+        try:
+            title_prop = raw_project.get("properties", {}).get("Proyecto", {})
+            title_list = title_prop.get("title", [])
+            project_name = title_list[0].get("plain_text", "Sin nombre") if title_list else "Sin nombre"
+            project_id = raw_project.get("id", "")
+        except (KeyError, IndexError):
+            project_name = "Sin nombre"
+            project_id = raw_project.get("id", "")
+
         keyboard_buttons.append([
             InlineKeyboardButton(
-                f"📁 {project.name[:30]}",
-                callback_data=f"task_select_project:{project.id[:8]}",
+                f"📁 {project_name[:30]}",
+                callback_data=f"task_select_project:{project_id[:8]}",
             )
         ])
 
@@ -935,16 +948,31 @@ async def handle_task_select_project(query, context, project_id: str | None) -> 
         )
         return
 
-    # Buscar el proyecto por ID parcial
-    from app.domain.repositories import get_project_repository
+    # Buscar el proyecto por ID parcial (sin cache para datos frescos)
+    from app.services.notion import get_notion_service
 
-    project_repo = get_project_repository()
-    projects = await project_repo.get_active()
+    notion = get_notion_service()
+    raw_projects = await notion.get_projects(active_only=True, use_cache=False)
 
     selected_project = None
-    for project in projects:
-        if project.id.startswith(project_id):
-            selected_project = project
+    for raw_project in raw_projects:
+        full_id = raw_project.get("id", "")
+        if full_id.startswith(project_id):
+            try:
+                title_prop = raw_project.get("properties", {}).get("Proyecto", {})
+                title_list = title_prop.get("title", [])
+                project_name = title_list[0].get("plain_text", "Sin nombre") if title_list else "Sin nombre"
+                tipo_prop = raw_project.get("properties", {}).get("Tipo", {})
+                project_type = tipo_prop.get("select", {}).get("name") if tipo_prop.get("select") else None
+            except (KeyError, IndexError):
+                project_name = "Sin nombre"
+                project_type = None
+
+            selected_project = {
+                "id": full_id,
+                "name": project_name,
+                "type": project_type,
+            }
             break
 
     if not selected_project:
@@ -952,15 +980,11 @@ async def handle_task_select_project(query, context, project_id: str | None) -> 
         return
 
     # Actualizar el pending_task con el nuevo proyecto
-    pending["project_match"] = {
-        "id": selected_project.id,
-        "name": selected_project.name,
-        "type": selected_project.type.value if selected_project.type else None,
-    }
+    pending["project_match"] = selected_project
     context.user_data["pending_task"] = pending
 
     await query.edit_message_text(
-        f"✅ <b>Proyecto asignado:</b> {selected_project.name}\n\n"
+        f"✅ <b>Proyecto asignado:</b> {selected_project['name']}\n\n"
         f"<b>Tarea:</b> <i>{pending.get('title', 'Sin título')}</i>\n\n"
         "Presiona el botón para crear la tarea:",
         parse_mode="HTML",

@@ -316,12 +316,28 @@ async def handle_message_with_registry(
             )
 
             # 4. Guardar mensaje en contexto para futuras clasificaciones
+            # Usar ConversationContext para mantener historial más largo
+            from app.agents.conversation_context import get_conversation_store
+
+            user_id = update.effective_user.id
+            conv_store = get_conversation_store()
+            conv_ctx = conv_store.get(user_id)
+
+            # Agregar mensaje al historial
+            conv_ctx.add_message(
+                role="user",
+                content=text,
+                intent=response.intent.value if response.intent else None,
+            )
+            conv_store.save(conv_ctx)
+
+            # También mantener en user_data para compatibilidad
             last_messages = context.user_data.get("last_messages_list", [])
-            last_messages.append(text[:100])
-            if len(last_messages) > 5:
-                last_messages = last_messages[-5:]
+            last_messages.append(text[:150])  # Más caracteres por mensaje
+            if len(last_messages) > 15:  # Aumentado de 5 a 15
+                last_messages = last_messages[-15:]
             context.user_data["last_messages_list"] = last_messages
-            context.user_data["last_messages"] = " | ".join(last_messages)
+            context.user_data["last_messages"] = " | ".join(last_messages[-10:])  # Últimos 10 para el prompt
 
             # Guardar enrichment para el handler
             enrichment = response.enrichment
@@ -368,9 +384,15 @@ async def handle_message_with_registry(
 
             # Fallback: Usar IntentRouter directamente
             from app.agents.intent_router import get_intent_router
+            from app.agents.conversation_context import get_conversation_store
 
             router = get_intent_router()
-            conversation_context = context.user_data.get("last_messages", "")
+
+            # Usar ConversationContext para contexto más rico
+            user_id = update.effective_user.id
+            conv_store = get_conversation_store()
+            conv_ctx = conv_store.get(user_id)
+            conversation_context = conv_ctx.get_history_summary()
 
             try:
                 intent_result = await router.execute(text, conversation_context)
