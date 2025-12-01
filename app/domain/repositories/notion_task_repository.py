@@ -331,6 +331,7 @@ class NotionTaskRepository(ITaskRepository):
             energia=energia,
             bloque=bloque,
             tiempo_est=tiempo_est,
+            parent_task_id=task.parent_task_id,
         )
 
         if result:

@@ -806,6 +806,28 @@ async def handle_task_create_confirm(query, context) -> None:
     )
     created, _ = await service.create(new_task, check_duplicates=False)
 
+    # Crear subtareas si existen
+    subtasks = pending.get("subtasks", [])
+    created_subtasks = []
+    if subtasks and created.id:
+        for subtask_title in subtasks:
+            if isinstance(subtask_title, str) and subtask_title.strip():
+                subtask = Task(
+                    id="",
+                    title=subtask_title.strip(),
+                    status=TaskStatus.TODAY,
+                    priority=TaskPriority.NORMAL,
+                    parent_task_id=created.id,
+                    project_id=project_id,
+                    project_name=project_name,
+                    source="telegram",
+                )
+                try:
+                    created_subtask, _ = await service.create(subtask, check_duplicates=False)
+                    created_subtasks.append(created_subtask.title)
+                except Exception as e:
+                    logger.warning(f"Error creando subtarea '{subtask_title}': {e}")
+
     # Limpiar pending
     context.user_data.pop("pending_task", None)
 
@@ -859,6 +881,15 @@ async def handle_task_create_confirm(query, context) -> None:
 
     if project_name:
         msg_parts.append(f"📁 Proyecto: {project_name}")
+
+    # Mostrar subtareas creadas
+    if created_subtasks:
+        msg_parts.append("")
+        msg_parts.append(f"📋 <b>Subtareas ({len(created_subtasks)}):</b>")
+        for st in created_subtasks[:5]:  # Mostrar máximo 5
+            msg_parts.append(f"  • {st}")
+        if len(created_subtasks) > 5:
+            msg_parts.append(f"  ... y {len(created_subtasks) - 5} más")
 
     await query.edit_message_text(
         "\n".join(msg_parts),
