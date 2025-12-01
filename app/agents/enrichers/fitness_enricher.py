@@ -73,27 +73,53 @@ class FitnessEnricher(BaseEnricher):
         result: EnrichmentResult,
     ) -> None:
         """Enriquece registro de entrenamiento."""
+        from app.agents.workout_logger import WorkoutType
+
+        # Intentar detectar tipo de workout del mensaje
+        message_lower = message.lower()
+        workout_type = WorkoutType.PUSH  # Default
+
+        if any(word in message_lower for word in ["pull", "espalda", "bicep", "remo", "dominada"]):
+            workout_type = WorkoutType.PULL
+        elif any(word in message_lower for word in ["leg", "pierna", "sentadilla", "squat"]):
+            workout_type = WorkoutType.LEGS
+        elif any(word in message_lower for word in ["cardio", "correr", "bici", "running"]):
+            workout_type = WorkoutType.CARDIO
+
+        # Si viene en entities, usar ese
+        if "workout_type" in entities:
+            type_map = {
+                "push": WorkoutType.PUSH,
+                "pull": WorkoutType.PULL,
+                "legs": WorkoutType.LEGS,
+                "cardio": WorkoutType.CARDIO,
+            }
+            workout_type = type_map.get(entities["workout_type"].lower(), WorkoutType.PUSH)
+
         try:
-            workout_result = await self.workout_logger.log_workout(message)
+            workout_result = await self.workout_logger.log_workout(
+                workout_description=message,
+                workout_type=workout_type,
+            )
 
             result.workout_data = {
-                "workout_type": workout_result.workout_type.value,
+                "workout_type": workout_type.value,
                 "exercises": [
                     {
                         "name": ex.name,
                         "sets": [
-                            {"reps": s.reps, "weight": s.weight, "rest": s.rest_seconds}
+                            {"reps": s.reps, "weight": s.weight}
                             for s in ex.sets
                         ],
                         "notes": ex.notes,
+                        "pr": ex.pr,
                     }
                     for ex in workout_result.exercises
                 ],
-                "duration_minutes": workout_result.duration_minutes,
                 "rating": workout_result.session_rating.value,
-                "notes": workout_result.notes,
-                "calories_burned": workout_result.calories_burned,
-                "muscle_groups": workout_result.muscle_groups,
+                "feedback": workout_result.feedback,
+                "new_prs": workout_result.new_prs,
+                "next_targets": workout_result.next_targets,
             }
             result.agents_used.append("WorkoutLogger")
 
@@ -126,29 +152,17 @@ class FitnessEnricher(BaseEnricher):
         meal_type = entities.get("meal", "comida")
 
         try:
-            nutrition_result = await self.nutrition_analyzer.analyze_meal(
-                meal_description=message,
+            # Usar quick_log para registro rápido de una comida
+            meal_result = await self.nutrition_analyzer.quick_log(
                 meal_type=meal_type,
+                description=message,
             )
 
             result.nutrition_data = {
                 "meal_type": meal_type,
-                "calories": nutrition_result.total_calories,
-                "protein": nutrition_result.protein_grams,
-                "carbs": nutrition_result.carbs_grams,
-                "fat": nutrition_result.fat_grams,
-                "fiber": nutrition_result.fiber_grams,
-                "rating": nutrition_result.rating.value,
-                "feedback": nutrition_result.feedback,
-                "suggestions": nutrition_result.suggestions,
-                "breakdown": [
-                    {
-                        "food": item.food_name,
-                        "portion": item.portion,
-                        "calories": item.calories,
-                    }
-                    for item in nutrition_result.meal_breakdown
-                ],
+                "description": meal_result.description,
+                "calories": meal_result.calories,
+                "category": meal_result.category,
             }
             result.agents_used.append("NutritionAnalyzer")
 

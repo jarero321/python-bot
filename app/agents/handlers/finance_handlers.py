@@ -41,16 +41,65 @@ class ExpenseAnalyzeHandler(BaseIntentHandler):
         amount = entities.get("amount", "?")
         item = entities.get("item", text[:50])
 
-        # Enviar mensaje inicial de procesamiento
-        await update.message.reply_html(
-            f"💰 <b>Análisis de compra</b>\n\n"
-            f"Item: <i>{item}</i>\n"
-            f"Precio: ${amount}\n\n"
-            f"Analizando si es buena idea...",
-        )
+        # Obtener análisis del FinanceEnricher (via enrichment del orquestador)
+        enrichment = context.user_data.get("current_enrichment", {})
+        financial_analysis = enrichment.get("financial_analysis", {})
 
-        # TODO: Integrar con SpendingAnalyzer para análisis real
-        # Por ahora, preguntas reflexivas
+        # Si tenemos análisis real del SpendingAnalyzer
+        if financial_analysis and not financial_analysis.get("error"):
+            is_essential = financial_analysis.get("is_essential", False)
+            category = financial_analysis.get("category", "general")
+            impact = financial_analysis.get("impact", "unknown")
+            recommendation = financial_analysis.get("recommendation", "wait")
+            honest_questions = financial_analysis.get("honest_questions", [])
+            alternatives = financial_analysis.get("alternatives", [])
+            wait_suggestion = financial_analysis.get("wait_suggestion", "")
+
+            # Construir mensaje con análisis real
+            impact_emoji = {
+                "minimal": "🟢",
+                "moderate": "🟡",
+                "significant": "🟠",
+                "critical": "🔴",
+            }.get(impact, "⚪")
+
+            message = f"💰 <b>Análisis de compra</b>\n\n"
+            message += f"Item: <i>{item}</i>\n"
+            message += f"Precio: <b>${amount}</b>\n"
+            message += f"Categoría: {category}\n"
+            message += f"Impacto: {impact_emoji} {impact}\n"
+            message += f"¿Esencial?: {'Sí' if is_essential else 'No'}\n\n"
+
+            if honest_questions:
+                message += "🤔 <b>Preguntas para reflexionar:</b>\n"
+                for q in honest_questions[:3]:
+                    message += f"• {q}\n"
+                message += "\n"
+
+            if alternatives:
+                message += "💡 <b>Alternativas:</b>\n"
+                for alt in alternatives[:3]:
+                    message += f"• {alt}\n"
+                message += "\n"
+
+            if wait_suggestion:
+                message += f"⏰ <i>{wait_suggestion}</i>\n\n"
+
+            rec_emoji = {"buy": "✅", "wait": "⏳", "wishlist": "📝", "skip": "❌"}.get(recommendation, "🤷")
+            message += f"<b>Recomendación:</b> {rec_emoji} {recommendation.upper()}"
+
+        else:
+            # Fallback: preguntas genéricas
+            message = (
+                f"💰 <b>Análisis de compra</b>\n\n"
+                f"Item: <i>{item}</i>\n"
+                f"Precio: ${amount}\n\n"
+                "🤔 <b>Preguntas para reflexionar:</b>\n\n"
+                "• ¿Realmente lo necesitas o solo lo quieres?\n"
+                "• ¿Tienes algo similar que cumpla la función?\n"
+                "• ¿Cómo te sentirías en una semana si no lo compras?\n\n"
+                "<i>Tip: La regla de las 24 horas funciona muy bien.</i>"
+            )
 
         keyboard = [
             [
@@ -65,25 +114,19 @@ class ExpenseAnalyzeHandler(BaseIntentHandler):
             ],
             [
                 InlineKeyboardButton(
+                    "📝 Wishlist",
+                    callback_data=f"expense_wishlist:{item[:30]}",
+                ),
+                InlineKeyboardButton(
                     "❌ No lo necesito",
                     callback_data="expense_reject",
                 ),
             ],
         ]
 
-        message = (
-            "🤔 <b>Preguntas para reflexionar:</b>\n\n"
-            "• ¿Realmente lo necesitas o solo lo quieres?\n"
-            "• ¿Tienes algo similar que cumpla la función?\n"
-            "• ¿Cómo te sentirías en una semana si no lo compras?\n\n"
-            "<i>Tip: La regla de las 24 horas funciona muy bien para "
-            "compras impulsivas.</i>"
-        )
-
         return HandlerResponse(
             message=message,
             keyboard=InlineKeyboardMarkup(keyboard),
-            already_sent=True,  # Ya enviamos el primer mensaje
         )
 
 

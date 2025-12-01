@@ -16,16 +16,19 @@ async def dispatch_pending_reminders():
     """
     Job que revisa y envía recordatorios pendientes.
 
-    Se ejecuta cada minuto para enviar recordatorios a tiempo.
+    Se ejecuta cada 2 minutos para enviar recordatorios a tiempo.
     """
     reminder_service = get_reminder_service()
     telegram_service = get_telegram_service()
 
     try:
+        logger.debug("Ejecutando dispatch_pending_reminders...")
+
         # Obtener recordatorios que deben enviarse
         due_reminders = await reminder_service.get_due_reminders()
 
         if not due_reminders:
+            logger.debug("No hay recordatorios pendientes para enviar")
             return
 
         logger.info(f"Despachando {len(due_reminders)} recordatorios")
@@ -98,8 +101,8 @@ async def dispatch_pending_reminders():
 
                 keyboard = InlineKeyboardMarkup(buttons)
 
-                # Enviar mensaje
-                await telegram_service.send_message(
+                # Enviar mensaje con keyboard
+                await telegram_service.send_message_with_keyboard(
                     chat_id=int(reminder.chat_id),
                     text=message,
                     reply_markup=keyboard,
@@ -174,7 +177,7 @@ async def send_evening_planning_prompt():
 
         keyboard = InlineKeyboardMarkup(buttons)
 
-        await telegram_service.send_message(
+        await telegram_service.send_message_with_keyboard(
             chat_id=chat_id,
             text=message,
             reply_markup=keyboard,
@@ -255,7 +258,7 @@ async def send_morning_plan_reminder():
 
         keyboard = InlineKeyboardMarkup(buttons)
 
-        await telegram_service.send_message(
+        await telegram_service.send_message_with_keyboard(
             chat_id=chat_id,
             text=message,
             reply_markup=keyboard,

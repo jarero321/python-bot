@@ -5,205 +5,190 @@
     "history": [
       {
         "role": "user",
-        "content": "Quiero crear una tarea revisar emails para agregarla a mi lista de pendientes",
-        "timestamp": "2025-11-30T11:05:55.276299",
-        "intent": "task_create",
-        "entities": {
-          "task": "revisar emails"
-        }
-      },
-      {
-        "role": "assistant",
-        "content": "Tarea creada: <b>revisar emails</b>\n\nPosibles blockers:\n  ⚠️ Sobrecarga de emails\n  ⚠️ emails que requieran mucha investigación",
-        "timestamp": "2025-11-30T11:05:58.855444",
-        "intent": null,
+        "content": "Listame las tareas que tengo",
+        "timestamp": "2025-11-30T19:11:37.304654",
+        "intent": "task_query",
         "entities": {}
       },
       {
         "role": "user",
-        "content": "Quiero crear una tarea revisar emails para agregarla a mi lista de pendientes",
-        "timestamp": "2025-11-30T11:08:19.852266",
-        "intent": "task_create",
+        "content": "Cambia el status a completado",
+        "timestamp": "2025-11-30T19:11:56.437806",
+        "intent": "task_update",
         "entities": {
-          "task": "revisar emails"
+          "status": "completado"
         }
       },
       {
-        "role": "assistant",
-        "content": "Tarea creada: <b>revisar emails</b>\n\nPosibles blockers:\n  ⚠️ Sobrecarga de emails\n  ⚠️ emails que requieran mucha investigación",
-        "timestamp": "2025-11-30T11:08:22.297615",
-        "intent": null,
+        "role": "user",
+        "content": "Cambiemos el status de las tareas",
+        "timestamp": "2025-11-30T19:12:31.452678",
+        "intent": "task_update",
+        "entities": {
+          "task": "tareas",
+          "status": "completado"
+        }
+      },
+      {
+        "role": "user",
+        "content": "Termine las tareas",
+        "timestamp": "2025-11-30T19:12:52.077472",
+        "intent": "task_delete",
+        "entities": {
+          "task": "tareas"
+        }
+      },
+      {
+        "role": "user",
+        "content": "Siguiente tarea que termine",
+        "timestamp": "2025-11-30T19:13:11.762597",
+        "intent": "task_query",
+        "entities": {
+          "status": "pendiente"
+        }
+      },
+      {
+        "role": "user",
+        "content": "Termine la tarea",
+        "timestamp": "2025-11-30T19:13:26.516228",
+        "intent": "task_delete",
+        "entities": {
+          "task": "tarea"
+        }
+      },
+      {
+        "role": "user",
+        "content": "Quiero crear un proyecto llamado paycash - trabajo",
+        "timestamp": "2025-11-30T19:13:53.627120",
+        "intent": "project_create",
+        "entities": {
+          "project_name": "paycash - trabajo"
+        }
+      },
+      {
+        "role": "user",
+        "content": "Planifica mi mañana",
+        "timestamp": "2025-11-30T19:27:39.865669",
+        "intent": "plan_tomorrow",
+        "entities": {
+          "date": "mañana"
+        }
+      },
+      {
+        "role": "user",
+        "content": "Créame una tarea Conversar con QA status facturación",
+        "timestamp": "2025-11-30T19:28:36.070617",
+        "intent": "task_create",
+        "entities": {
+          "task": "Conversar con QA status facturación"
+        }
+      },
+      {
+        "role": "user",
+        "content": "Créame una tarea Conversar con QA status facturación",
+        "timestamp": "2025-11-30T19:29:19.179965",
+        "intent": "task_create",
+        "entities": {
+          "task": "Conversar con QA status facturación"
+        }
+      },
+      {
+        "role": "user",
+        "content": "Créame una tarea preparar el deployment para el miércoles Facturación",
+        "timestamp": "2025-11-30T19:29:46.718792",
+        "intent": "task_create",
+        "entities": {
+          "task": "preparar el deployment",
+          "date": "miércoles Facturación"
+        }
+      },
+      {
+        "role": "user",
+        "content": "Para la comida y registro de comidas como es?",
+        "timestamp": "2025-11-30T19:31:36.931754",
+        "intent": "nutrition_log",
+        "entities": {
+          "meal": "comida"
+        }
+      },
+      {
+        "role": "user",
+        "content": "Desayuné un huevo",
+        "timestamp": "2025-11-30T19:32:00.571015",
+        "intent": "nutrition_log",
+        "entities": {
+          "meal": "desayuno",
+          "food": "huevo"
+        }
+      },
+      {
+        "role": "user",
+        "content": "Mi rutina de mañana que es?",
+        "timestamp": "2025-11-30T19:32:38.941122",
+        "intent": "plan_tomorrow",
+        "entities": {
+          "date": "mañana"
+        }
+      },
+      {
+        "role": "user",
+        "content": "Mi plan de entrenamiento mañana cuál es?",
+        "timestamp": "2025-11-30T19:33:11.017867",
+        "intent": "gym_query",
+        "entities": {
+          "date": "mañana"
+        }
+      },
+      {
+        "role": "user",
+        "content": "Mañana me toca push.  Cómo registro los pesos?",
+        "timestamp": "2025-11-30T19:33:34.272975",
+        "intent": "gym_log",
+        "entities": {
+          "meal": "push"
+        }
+      },
+      {
+        "role": "user",
+        "content": "Recuerdame en 1 minuto molestar a Carla",
+        "timestamp": "2025-11-30T19:34:11.161517",
+        "intent": "reminder_create",
+        "entities": {
+          "task": "molestar a Carla",
+          "time": "en 1 minuto"
+        }
+      },
+      {
+        "role": "user",
+        "content": "El recordatorio",
+        "timestamp": "2025-11-30T19:36:37.343695",
+        "intent": "reminder_query",
         "entities": {}
       },
       {
         "role": "user",
-        "content": "Crear tarea revisar emails",
-        "timestamp": "2025-11-30T11:13:23.137262",
-        "intent": "task_create",
+        "content": "Recuerdame ir a la tienda en 1 minuto",
+        "timestamp": "2025-11-30T19:58:50.067413",
+        "intent": "reminder_create",
         "entities": {
-          "task": "revisar emails"
+          "task": "ir a la tienda",
+          "time": "en 1 minuto"
         }
-      },
-      {
-        "role": "assistant",
-        "content": "Tarea creada: <b>revisar emails</b>\n\nPosibles blockers:\n  ⚠️ Conexión a internet lenta\n  ⚠️ interrupciones",
-        "timestamp": "2025-11-30T11:13:29.734702",
-        "intent": null,
-        "entities": {}
       },
       {
         "role": "user",
-        "content": "Crear tarea revisar emails",
-        "timestamp": "2025-11-30T11:14:05.191834",
-        "intent": "task_create",
+        "content": "Recuerdame ir a la tienda en 2 minutos",
+        "timestamp": "2025-11-30T20:06:13.672422",
+        "intent": "reminder_create",
         "entities": {
-          "task": "revisar emails"
+          "task": "ir a la tienda",
+          "time": "en 2 minutos"
         }
-      },
-      {
-        "role": "assistant",
-        "content": "Tarea creada: <b>revisar emails</b>\n\nPosibles blockers:\n  ⚠️ Conexión a internet lenta\n  ⚠️ interrupciones",
-        "timestamp": "2025-11-30T11:14:06.737477",
-        "intent": null,
-        "entities": {}
-      },
-      {
-        "role": "user",
-        "content": "Quiero crear una tarea revisar pendientes",
-        "timestamp": "2025-11-30T11:15:00.374292",
-        "intent": "task_create",
-        "entities": {
-          "task": "revisar pendientes"
-        }
-      },
-      {
-        "role": "assistant",
-        "content": "Tarea creada: <b>revisar pendientes</b>\n\nPosibles blockers:\n  ⚠️ Falta de claridad en la descripción de los pendientes\n  ⚠️ falta de acceso a la lista de pendientes",
-        "timestamp": "2025-11-30T11:15:04.353020",
-        "intent": null,
-        "entities": {}
-      },
-      {
-        "role": "user",
-        "content": "Quiero crear una tarea para ir a jugar borderlands 2",
-        "timestamp": "2025-11-30T11:15:27.029724",
-        "intent": "task_create",
-        "entities": {
-          "task": "ir a jugar borderlands 2"
-        }
-      },
-      {
-        "role": "assistant",
-        "content": "Tarea creada: <b>ir a jugar borderlands 2</b>\n\nPosibles blockers:\n  ⚠️ Other commitments\n  ⚠️ Internet outage",
-        "timestamp": "2025-11-30T11:15:31.746424",
-        "intent": null,
-        "entities": {}
-      },
-      {
-        "role": "user",
-        "content": "Crear tarea de revisar pendientes",
-        "timestamp": "2025-11-30T11:17:15.326354",
-        "intent": "task_create",
-        "entities": {
-          "task": "revisar pendientes"
-        }
-      },
-      {
-        "role": "assistant",
-        "content": "",
-        "timestamp": "2025-11-30T11:17:20.435098",
-        "intent": null,
-        "entities": {}
-      },
-      {
-        "role": "user",
-        "content": "Tarea urgente llamar a cliente",
-        "timestamp": "2025-11-30T11:18:09.723488",
-        "intent": "task_create",
-        "entities": {
-          "task": "llamar a cliente",
-          "priority": "urgente"
-        }
-      },
-      {
-        "role": "assistant",
-        "content": "",
-        "timestamp": "2025-11-30T11:18:12.184922",
-        "intent": null,
-        "entities": {}
-      },
-      {
-        "role": "user",
-        "content": "Tarea urgente llamar a cliente de famsa",
-        "timestamp": "2025-11-30T11:24:34.867555",
-        "intent": "task_create",
-        "entities": {
-          "task": "llamar a cliente de famsa",
-          "priority": "urgent"
-        }
-      },
-      {
-        "role": "assistant",
-        "content": "",
-        "timestamp": "2025-11-30T11:24:40.504368",
-        "intent": null,
-        "entities": {}
-      },
-      {
-        "role": "user",
-        "content": "Tarea urgente: sacar a los perros",
-        "timestamp": "2025-11-30T11:25:06.363966",
-        "intent": "task_create",
-        "entities": {
-          "task": "sacar a los perros",
-          "priority": "urgent"
-        }
-      },
-      {
-        "role": "assistant",
-        "content": "",
-        "timestamp": "2025-11-30T11:25:08.957189",
-        "intent": null,
-        "entities": {}
       }
     ],
-    "active_entity": {
-      "entity_type": "task",
-      "entity_id": "2bb9fe93-ba02-8133-bc74-f1add11e072a",
-      "entity_name": "ir a jugar borderlands 2",
-      "entity_data": {
-        "task_title": "ir a jugar borderlands 2",
-        "complexity": {
-          "level": "quick",
-          "estimated_minutes": 60,
-          "energy_required": "low",
-          "should_divide": false,
-          "subtasks": [],
-          "blockers": [
-            "Other commitments",
-            "Internet outage"
-          ],
-          "requires_research": false
-        },
-        "urgency_score": 0,
-        "suggested_context": "Freelance-PA",
-        "suggested_priority": "🔄 Normal",
-        "suggested_bloque": "🌆 Evening",
-        "suggested_fecha_do": null,
-        "suggested_fecha_due": null,
-        "project": {
-          "id": null,
-          "name": null
-        },
-        "reminders": []
-      },
-      "subtasks": [],
-      "suggested_subtasks": [],
-      "blockers": [],
-      "created_at": "2025-11-30T11:15:31.746397"
-    },
+    "active_entity": null,
     "pending_action": null,
-    "last_intent": "task_create",
-    "last_activity": "2025-11-30T11:25:08.957191"
+    "last_intent": "reminder_create",
+    "last_activity": "2025-11-30T20:06:13.672424"
   }
 }

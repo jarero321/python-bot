@@ -61,8 +61,8 @@ class PlanTomorrowHandler(BaseIntentHandler):
 
         text = self.get_raw_message(intent_result)
 
-        # Mostrar procesamiento
-        await update.message.reply_html(
+        # Mostrar procesamiento (mensaje que se editará después)
+        processing_msg = await update.message.reply_html(
             "🌙 <b>Planificando tu mañana...</b>\n\n"
             "⏳ Analizando tareas pendientes y prioridades..."
         )
@@ -88,33 +88,52 @@ class PlanTomorrowHandler(BaseIntentHandler):
                     energy_level=energy,
                 )
 
-            if "error" in plan:
-                return HandlerResponse(
-                    message=f"❌ Error: {plan['error']}",
-                    success=False,
-                    already_sent=True,
-                )
+            # Verificar si hay error (plan vacío)
+            if not plan.selected_tasks:
+                if plan.warnings and "Error" in plan.warnings[0]:
+                    return HandlerResponse(
+                        message=f"❌ Error: {plan.warnings[0]}",
+                        success=False,
+                        already_sent=True,
+                    )
 
-            # Construir respuesta
-            response = "🌅 <b>Plan para mañana</b>\n\n"
+            # Construir respuesta usando atributos del dataclass TomorrowPlan
+            response = f"🌅 <b>Plan para {plan.day_of_week}</b>\n"
+            response += f"<i>{plan.date}</i>\n\n"
 
-            if plan.get("priority_tasks"):
-                response += "<b>🎯 Prioridades:</b>\n"
-                for task in plan["priority_tasks"][:3]:
-                    response += f"  • {task}\n"
+            if plan.selected_tasks:
+                response += "<b>🎯 Tareas seleccionadas:</b>\n"
+                for task in plan.selected_tasks[:5]:
+                    task_name = task.get("name", "Sin nombre") if isinstance(task, dict) else str(task)
+                    prioridad = task.get("prioridad", "") if isinstance(task, dict) else ""
+                    response += f"  • {task_name}"
+                    if prioridad:
+                        response += f" [{prioridad}]"
+                    response += "\n"
                 response += "\n"
 
-            if plan.get("secondary_tasks"):
-                response += "<b>📋 Si hay tiempo:</b>\n"
-                for task in plan["secondary_tasks"][:3]:
-                    response += f"  • {task}\n"
+            if plan.task_order:
+                response += "<b>📋 Orden sugerido:</b>\n"
+                for i, order_item in enumerate(plan.task_order[:5], 1):
+                    response += f"  {i}. {order_item}\n"
                 response += "\n"
 
-            if plan.get("ai_suggestion"):
-                response += f"<b>💡 Sugerencia:</b>\n{plan['ai_suggestion']}\n\n"
+            if plan.reasoning:
+                response += f"<b>💡 Razonamiento:</b>\n{plan.reasoning}\n\n"
 
-            if plan.get("energy_tip"):
-                response += f"<i>🔋 {plan['energy_tip']}</i>\n"
+            if plan.warnings:
+                response += "<b>⚠️ Alertas:</b>\n"
+                for warning in plan.warnings[:3]:
+                    response += f"  • {warning}\n"
+                response += "\n"
+
+            if plan.suggestions:
+                response += "<b>💭 Sugerencias:</b>\n"
+                for suggestion in plan.suggestions[:2]:
+                    response += f"  • {suggestion}\n"
+                response += "\n"
+
+            response += f"<i>⏱️ Carga estimada: {plan.estimated_workload_hours:.1f} horas</i>"
 
             # Keyboard para acciones
             keyboard = InlineKeyboardMarkup([
@@ -130,6 +149,13 @@ class PlanTomorrowHandler(BaseIntentHandler):
                 ],
             ])
 
+            # Editar el mensaje de procesamiento con la respuesta final
+            await processing_msg.edit_text(
+                response,
+                parse_mode="HTML",
+                reply_markup=keyboard,
+            )
+
             return HandlerResponse(
                 message=response,
                 keyboard=keyboard,
@@ -138,6 +164,14 @@ class PlanTomorrowHandler(BaseIntentHandler):
 
         except Exception as e:
             logger.error(f"Error en planificación: {e}")
+            # Editar mensaje con error
+            try:
+                await processing_msg.edit_text(
+                    "❌ Error al planificar. Intenta de nuevo.",
+                    parse_mode="HTML",
+                )
+            except Exception:
+                pass
             return HandlerResponse(
                 message="❌ Error al planificar. Intenta de nuevo.",
                 success=False,
@@ -164,7 +198,7 @@ class PlanWeekHandler(BaseIntentHandler):
     ) -> HandlerResponse:
         from app.agents.planning_assistant import get_planning_assistant
 
-        await update.message.reply_html(
+        processing_msg = await update.message.reply_html(
             "📊 <b>Cargando resumen semanal...</b>"
         )
 
@@ -173,6 +207,10 @@ class PlanWeekHandler(BaseIntentHandler):
             overview = await planning.get_week_overview()
 
             if "error" in overview:
+                await processing_msg.edit_text(
+                    f"❌ Error: {overview['error']}",
+                    parse_mode="HTML",
+                )
                 return HandlerResponse(
                     message=f"❌ Error: {overview['error']}",
                     success=False,
@@ -205,6 +243,9 @@ class PlanWeekHandler(BaseIntentHandler):
                 for alert in overview["alerts"][:3]:
                     response += f"  • {alert}\n"
 
+            # Editar mensaje con respuesta
+            await processing_msg.edit_text(response, parse_mode="HTML")
+
             return HandlerResponse(
                 message=response,
                 already_sent=True,
@@ -212,6 +253,13 @@ class PlanWeekHandler(BaseIntentHandler):
 
         except Exception as e:
             logger.error(f"Error obteniendo semana: {e}")
+            try:
+                await processing_msg.edit_text(
+                    "❌ Error al cargar la semana.",
+                    parse_mode="HTML",
+                )
+            except Exception:
+                pass
             return HandlerResponse(
                 message="❌ Error al cargar la semana.",
                 success=False,
@@ -421,7 +469,8 @@ class ReminderCreateHandler(BaseIntentHandler):
         entities = self.get_entities(intent_result)
         text = self.get_raw_message(intent_result)
 
-        reminder_text = entities.get("reminder", text)
+        # El IntentRouter usa "task" o "reminder" para el texto del recordatorio
+        reminder_text = entities.get("task") or entities.get("reminder") or text
         reminder_time = entities.get("time", "")
         reminder_date = entities.get("date", "")
 
@@ -478,14 +527,81 @@ class ReminderCreateHandler(BaseIntentHandler):
             )
 
         # Crear el recordatorio directamente
-        # TODO: Integrar con ReminderService
-        return HandlerResponse(
-            message=(
-                f"⏰ <b>Recordatorio creado</b>\n\n"
-                f"<i>{reminder_text[:100]}</i>\n\n"
-                f"Te recordaré: {reminder_time or reminder_date or 'pronto'}"
+        import re
+        from datetime import datetime, timedelta
+        from app.services.reminder_service import get_reminder_service
+
+        now = datetime.now()
+        scheduled_at = None
+        time_str = (reminder_time or reminder_date or "").lower()
+
+        # Parsear tiempo relativo
+        match = re.search(r"(\d+)\s*(minuto|min|m|hora|h)", time_str)
+        if match:
+            amount = int(match.group(1))
+            unit = match.group(2)
+            if unit.startswith("h"):
+                scheduled_at = now + timedelta(hours=amount)
+            else:
+                scheduled_at = now + timedelta(minutes=amount)
+
+        # Parsear "mañana"
+        if not scheduled_at and "mañana" in time_str:
+            hour_match = re.search(r"(\d{1,2})(?::(\d{2}))?", time_str)
+            if hour_match:
+                hour = int(hour_match.group(1))
+                minute = int(hour_match.group(2) or 0)
+                scheduled_at = (now + timedelta(days=1)).replace(
+                    hour=hour, minute=minute, second=0
+                )
+            else:
+                scheduled_at = (now + timedelta(days=1)).replace(
+                    hour=9, minute=0, second=0
+                )
+
+        # Parsear hora específica "a las X"
+        if not scheduled_at:
+            hour_match = re.search(r"(?:a\s+las?\s+)?(\d{1,2})(?::(\d{2}))?(?:\s*(am|pm))?", time_str)
+            if hour_match:
+                hour = int(hour_match.group(1))
+                minute = int(hour_match.group(2) or 0)
+                ampm = hour_match.group(3)
+                if ampm == "pm" and hour < 12:
+                    hour += 12
+                scheduled_at = now.replace(hour=hour, minute=minute, second=0)
+                if scheduled_at <= now:
+                    scheduled_at += timedelta(days=1)
+
+        if not scheduled_at:
+            # Fallback: 1 hora
+            scheduled_at = now + timedelta(hours=1)
+
+        # Crear recordatorio
+        try:
+            chat_id = str(update.effective_chat.id)
+            user_id = str(update.effective_user.id)
+            service = get_reminder_service()
+
+            await service.create_reminder(
+                chat_id=chat_id,
+                user_id=user_id,
+                title=reminder_text,
+                scheduled_at=scheduled_at,
             )
-        )
+
+            time_display = scheduled_at.strftime("%H:%M del %d/%m")
+            return HandlerResponse(
+                message=(
+                    f"✅ <b>Recordatorio creado</b>\n\n"
+                    f"<i>{reminder_text[:100]}</i>\n\n"
+                    f"⏰ Te recordaré: {time_display}"
+                )
+            )
+        except Exception as e:
+            self.logger.error(f"Error creando recordatorio: {e}")
+            return HandlerResponse(
+                message=f"❌ Error creando recordatorio: {str(e)[:50]}"
+            )
 
 
 @intent_handler(UserIntent.REMINDER_QUERY)

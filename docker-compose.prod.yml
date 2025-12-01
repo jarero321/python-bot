@@ -10,8 +10,6 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Código fuente para hot reload en desarrollo
-      - ./app:/app/app:ro
       # Base de datos persistente
       - ./data:/app/data
       # Logs
@@ -19,7 +17,7 @@ services:
     env_file:
       - .env
     environment:
-      - APP_ENV=${APP_ENV:-development}
+      - APP_ENV=production
       - TZ=America/Mexico_City
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -30,20 +28,22 @@ services:
     networks:
       - carlos-network
     depends_on:
-      - ngrok
+      cloudflared:
+        condition: service_healthy
 
-  ngrok:
-    image: ngrok/ngrok:latest
-    container_name: carlos-command-ngrok
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: carlos-command-cloudflared
     restart: unless-stopped
-    command:
-      - "http"
-      - "app:8000"
-      - "--log=stdout"
+    command: tunnel run
     environment:
-      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
-    ports:
-      - "4040:4040"  # Dashboard de ngrok
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    healthcheck:
+      test: ["CMD", "cloudflared", "tunnel", "info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     networks:
       - carlos-network
 

@@ -621,29 +621,51 @@ class PlanningAssistant:
 
     # ==================== HELPERS ====================
 
-    def _format_task_for_planning(self, task: dict) -> dict | None:
+    def _format_task_for_planning(self, task: dict | None) -> dict | None:
         """Formatea una tarea para planificación."""
-        props = task.get("properties", {})
+        if not task:
+            return None
+
+        props = task.get("properties")
+        if not props:
+            return None
 
         # Obtener nombre
         name = ""
-        title = props.get("Tarea", {}).get("title", [])
-        if title:
-            name = title[0].get("text", {}).get("content", "")
+        title_data = props.get("Tarea", {})
+        if title_data:
+            title = title_data.get("title", [])
+            if title and len(title) > 0:
+                text_obj = title[0].get("text", {})
+                if text_obj:
+                    name = text_obj.get("content", "")
 
         if not name:
             return None
 
-        # Obtener otros campos
-        prioridad = props.get("Prioridad", {}).get("select", {}).get("name", "🔄 Normal")
-        contexto = props.get("Contexto", {}).get("select", {}).get("name", "Personal")
-        estado = props.get("Estado", {}).get("select", {}).get("name", "Backlog")
-        complejidad = props.get("Complejidad", {}).get("select", {}).get("name", "Standard")
+        # Obtener otros campos con acceso seguro
+        prioridad_data = props.get("Prioridad") or {}
+        prioridad_select = prioridad_data.get("select") or {}
+        prioridad = prioridad_select.get("name", "🔄 Normal")
 
-        fecha_do = props.get("Fecha Do", {}).get("date", {})
+        contexto_data = props.get("Contexto") or {}
+        contexto_select = contexto_data.get("select") or {}
+        contexto = contexto_select.get("name", "Personal")
+
+        estado_data = props.get("Estado") or {}
+        estado_select = estado_data.get("select") or {}
+        estado = estado_select.get("name", "Backlog")
+
+        complejidad_data = props.get("Complejidad") or {}
+        complejidad_select = complejidad_data.get("select") or {}
+        complejidad = complejidad_select.get("name", "Standard")
+
+        fecha_do_data = props.get("Fecha Do") or {}
+        fecha_do = fecha_do_data.get("date") or {}
         fecha_do_str = fecha_do.get("start") if fecha_do else None
 
-        fecha_due = props.get("Fecha Due", {}).get("date", {})
+        fecha_due_data = props.get("Fecha Due") or {}
+        fecha_due = fecha_due_data.get("date") or {}
         fecha_due_str = fecha_due.get("start") if fecha_due else None
 
         # Estimar minutos según complejidad

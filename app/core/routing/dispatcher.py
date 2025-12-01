@@ -327,11 +327,21 @@ async def handle_message_with_registry(
             enrichment = response.enrichment
             context.user_data["current_enrichment"] = {
                 "enricher": enrichment.enricher_name if enrichment else None,
-                "task_data": enrichment.task_data if enrichment else None,
+                # Task data (combinado de campos de tareas)
+                "complexity": enrichment.complexity if enrichment else None,
+                "subtasks": enrichment.subtasks if enrichment else [],
+                "blockers": enrichment.blockers if enrichment else [],
+                "suggested_priority": enrichment.suggested_priority if enrichment else None,
+                # Planning data
                 "planning_data": enrichment.planning_data if enrichment else None,
+                # Fitness data
                 "workout_data": enrichment.workout_data if enrichment else None,
                 "nutrition_data": enrichment.nutrition_data if enrichment else None,
+                # Finance data
                 "financial_analysis": enrichment.financial_analysis if enrichment else None,
+                # Project data
+                "project_match": enrichment.project_match if enrichment else None,
+                # Metadata
                 "agents_used": response.agents_used,
                 "processing_time_ms": response.processing_time_ms,
             }

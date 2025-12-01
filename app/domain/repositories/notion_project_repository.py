@@ -195,7 +195,7 @@ class NotionProjectRepository(IProjectRepository):
         result = await self._notion.create_project(
             nombre=project.name,
             tipo=self._map_type_to_notion(project.type),
-            descripcion=project.description,
+            objetivo=project.description,  # NotionService usa 'objetivo' no 'descripcion'
         )
 
         if result:

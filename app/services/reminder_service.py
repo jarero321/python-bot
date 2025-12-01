@@ -191,9 +191,10 @@ class ReminderService:
         now = datetime.now()
 
         async with get_session() as session:
+            # Incluir PENDING y SNOOZED (cuando el snooze expira vuelven a ser enviables)
             query = select(ScheduledReminder).where(
                 and_(
-                    ScheduledReminder.status == ReminderStatus.PENDING,
+                    ScheduledReminder.status.in_([ReminderStatus.PENDING, ReminderStatus.SNOOZED]),
                     ScheduledReminder.scheduled_at <= now,
                     or_(
                         ScheduledReminder.snooze_until.is_(None),
@@ -207,7 +208,12 @@ class ReminderService:
             ).order_by(ScheduledReminder.priority.desc(), ScheduledReminder.scheduled_at)
 
             result = await session.execute(query)
-            return list(result.scalars().all())
+            reminders = list(result.scalars().all())
+
+            if reminders:
+                logger.info(f"Encontrados {len(reminders)} recordatorios pendientes")
+
+            return reminders
 
     async def mark_acknowledged(self, reminder_id: int) -> bool:
         """Marca un recordatorio como reconocido."""

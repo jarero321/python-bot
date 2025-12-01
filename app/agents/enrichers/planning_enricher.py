@@ -91,30 +91,36 @@ class PlanningEnricher(BaseEnricher):
     ) -> None:
         """Enriquece planificación del día siguiente."""
         try:
-            # Obtener tareas pendientes del contexto
-            pending_tasks = context.get("pending_tasks", []) if context else []
-            energy_level = entities.get("energy", "normal")
+            energy_level = entities.get("energy", "no_especificado")
 
             plan = await self.planning_assistant.plan_tomorrow(
-                pending_tasks=pending_tasks,
-                energy_preference=energy_level,
+                user_message=message,
+                energy_level=energy_level,
             )
 
-            result.planning_data = {
-                "type": "tomorrow_plan",
-                "top_priorities": plan.top_priorities,
-                "time_blocks": [
-                    {
-                        "time": tb.time_slot,
-                        "task": tb.task_title,
-                        "duration": tb.duration_minutes,
-                    }
-                    for tb in plan.suggested_schedule
-                ],
-                "focus_areas": plan.focus_areas,
-                "warnings": plan.warnings,
-            }
-            result.agents_used.append("PlanningAssistant")
+            # plan es un TomorrowPlan dataclass
+            if hasattr(plan, "selected_tasks") and plan.selected_tasks:
+                result.planning_data = {
+                    "type": "tomorrow_plan",
+                    "date": plan.date,
+                    "day_of_week": plan.day_of_week,
+                    "selected_tasks": [
+                        {
+                            "name": t.get("name", "") if isinstance(t, dict) else str(t),
+                            "priority": t.get("prioridad", "") if isinstance(t, dict) else "",
+                            "context": t.get("contexto", "") if isinstance(t, dict) else "",
+                        }
+                        for t in plan.selected_tasks
+                    ],
+                    "task_order": plan.task_order,
+                    "reasoning": plan.reasoning,
+                    "warnings": plan.warnings,
+                    "suggestions": plan.suggestions,
+                    "estimated_hours": plan.estimated_workload_hours,
+                }
+                result.agents_used.append("PlanningAssistant")
+            else:
+                result.planning_data = {"type": "tomorrow_plan", "error": "Plan vacío"}
 
         except Exception as e:
             self.logger.warning(f"Error en PlanningAssistant: {e}")

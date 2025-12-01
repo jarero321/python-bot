@@ -122,6 +122,34 @@ class NotionTaskRepository(ITaskRepository):
         }
         return mapping.get(notion_block)
 
+    def _map_complexity_to_notion(self, complexity: TaskComplexity) -> TaskComplejidad:
+        """Mapea complejidad del dominio a Notion."""
+        mapping = {
+            TaskComplexity.QUICK: TaskComplejidad.QUICK,
+            TaskComplexity.STANDARD: TaskComplejidad.STANDARD,
+            TaskComplexity.HEAVY: TaskComplejidad.HEAVY,
+            TaskComplexity.EPIC: TaskComplejidad.EPIC,
+        }
+        return mapping.get(complexity, TaskComplejidad.STANDARD)
+
+    def _map_energy_to_notion(self, energy: TaskEnergy) -> TaskEnergia:
+        """Mapea energía del dominio a Notion."""
+        mapping = {
+            TaskEnergy.DEEP_WORK: TaskEnergia.DEEP_WORK,
+            TaskEnergy.MEDIUM: TaskEnergia.MEDIUM,
+            TaskEnergy.LOW: TaskEnergia.LOW,
+        }
+        return mapping.get(energy, TaskEnergia.MEDIUM)
+
+    def _map_timeblock_to_notion(self, time_block: TaskTimeBlock) -> TaskBloque:
+        """Mapea bloque de tiempo del dominio a Notion."""
+        mapping = {
+            TaskTimeBlock.MORNING: TaskBloque.MORNING,
+            TaskTimeBlock.AFTERNOON: TaskBloque.AFTERNOON,
+            TaskTimeBlock.EVENING: TaskBloque.EVENING,
+        }
+        return mapping.get(time_block, TaskBloque.MORNING)
+
     def _notion_to_task(self, notion_data: dict[str, Any]) -> Task:
         """Convierte datos de Notion a entidad Task."""
         props = notion_data.get("properties", {})
@@ -215,6 +243,30 @@ class NotionTaskRepository(ITaskRepository):
                 "select": {"name": self._map_priority_to_notion(task.priority).value}
             }
 
+        if task.complexity:
+            properties["Complejidad"] = {
+                "select": {"name": self._map_complexity_to_notion(task.complexity).value}
+            }
+
+        if task.energy:
+            properties["Energia"] = {
+                "select": {"name": self._map_energy_to_notion(task.energy).value}
+            }
+
+        if task.time_block:
+            properties["Bloque"] = {
+                "select": {"name": self._map_timeblock_to_notion(task.time_block).value}
+            }
+
+        if task.estimated_minutes:
+            if task.estimated_minutes >= 60:
+                hours = task.estimated_minutes // 60
+                mins = task.estimated_minutes % 60
+                tiempo_est = f"{hours}h{mins}m" if mins else f"{hours}h"
+            else:
+                tiempo_est = f"{task.estimated_minutes}m"
+            properties["Tiempo Est"] = {"rich_text": [{"text": {"content": tiempo_est}}]}
+
         if task.due_date:
             properties["Fecha Due"] = {"date": {"start": task.due_date.isoformat()}}
 
@@ -243,7 +295,30 @@ class NotionTaskRepository(ITaskRepository):
             return None
 
     async def create(self, task: Task) -> Task:
-        """Crea una nueva tarea."""
+        """Crea una nueva tarea con todos los datos enriquecidos."""
+        # Mapear campos opcionales
+        complejidad = None
+        if task.complexity:
+            complejidad = self._map_complexity_to_notion(task.complexity)
+
+        energia = None
+        if task.energy:
+            energia = self._map_energy_to_notion(task.energy)
+
+        bloque = None
+        if task.time_block:
+            bloque = self._map_timeblock_to_notion(task.time_block)
+
+        # Formatear tiempo estimado
+        tiempo_est = None
+        if task.estimated_minutes:
+            if task.estimated_minutes >= 60:
+                hours = task.estimated_minutes // 60
+                mins = task.estimated_minutes % 60
+                tiempo_est = f"{hours}h{mins}m" if mins else f"{hours}h"
+            else:
+                tiempo_est = f"{task.estimated_minutes}m"
+
         result = await self._notion.create_task(
             tarea=task.title,
             estado=self._map_status_to_notion(task.status),
@@ -252,6 +327,10 @@ class NotionTaskRepository(ITaskRepository):
             fecha_do=task.scheduled_date.isoformat() if task.scheduled_date else None,
             proyecto_id=task.project_id,
             notas=task.notes,
+            complejidad=complejidad,
+            energia=energia,
+            bloque=bloque,
+            tiempo_est=tiempo_est,
         )
 
         if result:

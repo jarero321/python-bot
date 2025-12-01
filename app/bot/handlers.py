@@ -435,6 +435,24 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         elif action == "show_urgent_tasks":
             await handle_show_urgent_tasks(query, context)
 
+        # Workout callbacks
+        elif action == "workout_type":
+            workout_type = parts[1] if len(parts) > 1 else "push"
+            await handle_workout_type_callback(query, context, workout_type)
+
+        elif action == "workout_cancel":
+            context.user_data.pop("pending_workout", None)
+            await query.edit_message_text("❌ Registro de workout cancelado.")
+
+        # Nutrition callbacks
+        elif action == "nutrition_cat":
+            category = parts[1] if len(parts) > 1 else "moderado"
+            await handle_nutrition_category_callback(query, context, category)
+
+        elif action == "nutrition_cancel":
+            context.user_data.pop("pending_nutrition", None)
+            await query.edit_message_text("❌ Registro de comida cancelado.")
+
         # Default
         else:
             logger.warning(f"Callback no manejado: {data}")
@@ -536,8 +554,9 @@ async def handle_task_complete_callback(query, context, task_id: str | None) -> 
 
 
 async def handle_task_create_confirm(query, context) -> None:
-    """Confirma la creación de una tarea."""
+    """Confirma la creación de una tarea con datos enriquecidos."""
     import re
+    from datetime import date
 
     pending = context.user_data.get("pending_task", {})
     title = pending.get("title", "")
@@ -585,7 +604,7 @@ async def handle_task_create_confirm(query, context) -> None:
         return
 
     from app.domain.services import get_task_service
-    from app.domain.entities.task import Task, TaskStatus, TaskPriority
+    from app.domain.entities.task import Task, TaskStatus, TaskPriority, TaskComplexity, TaskEnergy, TaskTimeBlock
 
     # Mapear prioridad
     priority_map = {
@@ -599,12 +618,109 @@ async def handle_task_create_confirm(query, context) -> None:
     }
     priority = priority_map.get(priority_str.lower(), TaskPriority.NORMAL)
 
+    # Extraer datos enriquecidos del pending_task
+    complexity_data = pending.get("complexity", {})
+    complexity = None
+    energy = None
+    time_block = None
+    estimated_minutes = None
+    notes = None
+    scheduled_date = None
+    due_date = None
+    task_context = pending.get("context")
+
+    # Mapear complejidad
+    if complexity_data:
+        complexity_str = complexity_data.get("level", "").lower()
+        complexity_map = {
+            "quick": TaskComplexity.QUICK,
+            "standard": TaskComplexity.STANDARD,
+            "heavy": TaskComplexity.HEAVY,
+            "epic": TaskComplexity.EPIC,
+        }
+        complexity = complexity_map.get(complexity_str)
+
+        # Extraer energía
+        energy_str = complexity_data.get("energy", "").lower()
+        energy_map = {
+            "deep_work": TaskEnergy.DEEP_WORK,
+            "deep work": TaskEnergy.DEEP_WORK,
+            "alta": TaskEnergy.DEEP_WORK,
+            "medium": TaskEnergy.MEDIUM,
+            "media": TaskEnergy.MEDIUM,
+            "low": TaskEnergy.LOW,
+            "baja": TaskEnergy.LOW,
+        }
+        energy = energy_map.get(energy_str)
+
+        # Extraer tiempo estimado
+        est_minutes = complexity_data.get("estimated_minutes")
+        if est_minutes:
+            estimated_minutes = int(est_minutes)
+
+        # Extraer bloque de tiempo
+        block_str = complexity_data.get("best_time_block", "").lower()
+        block_map = {
+            "morning": TaskTimeBlock.MORNING,
+            "mañana": TaskTimeBlock.MORNING,
+            "afternoon": TaskTimeBlock.AFTERNOON,
+            "tarde": TaskTimeBlock.AFTERNOON,
+            "evening": TaskTimeBlock.EVENING,
+            "noche": TaskTimeBlock.EVENING,
+        }
+        time_block = block_map.get(block_str)
+
+        # Extraer notas/reasoning
+        reasoning = complexity_data.get("reasoning")
+        if reasoning:
+            notes = reasoning
+
+    # Extraer fechas
+    fecha_do = pending.get("fecha_do")
+    fecha_due = pending.get("due_date")
+
+    if fecha_do:
+        try:
+            scheduled_date = date.fromisoformat(fecha_do)
+        except (ValueError, TypeError):
+            pass
+
+    if fecha_due:
+        try:
+            due_date = date.fromisoformat(fecha_due)
+        except (ValueError, TypeError):
+            pass
+
+    # Crear tarea con todos los datos enriquecidos
     service = get_task_service()
-    new_task = Task(id="", title=title, status=TaskStatus.TODAY, priority=priority)
+    new_task = Task(
+        id="",
+        title=title,
+        status=TaskStatus.TODAY,
+        priority=priority,
+        complexity=complexity,
+        energy=energy,
+        time_block=time_block,
+        estimated_minutes=estimated_minutes,
+        notes=notes,
+        scheduled_date=scheduled_date,
+        due_date=due_date,
+        context=task_context,
+        source="telegram",
+    )
     created, _ = await service.create(new_task, check_duplicates=False)
 
     # Limpiar pending
     context.user_data.pop("pending_task", None)
+
+    # Construir mensaje de confirmación con detalles
+    msg_parts = [
+        f"✅ <b>Tarea creada</b>",
+        f"",
+        f"<i>{created.title}</i>",
+        f"",
+        f"📊 Estado: 🎯 Hoy",
+    ]
 
     priority_emoji = {
         TaskPriority.URGENT: "🔥 Urgente",
@@ -612,12 +728,41 @@ async def handle_task_create_confirm(query, context) -> None:
         TaskPriority.NORMAL: "🔄 Normal",
         TaskPriority.LOW: "🧊 Baja",
     }.get(priority, "🔄 Normal")
+    msg_parts.append(f"⭐ Prioridad: {priority_emoji}")
+
+    if complexity:
+        complexity_names = {
+            TaskComplexity.QUICK: "🟢 Quick (<30m)",
+            TaskComplexity.STANDARD: "🟡 Standard (30m-2h)",
+            TaskComplexity.HEAVY: "🔴 Heavy (2-4h)",
+            TaskComplexity.EPIC: "🟣 Epic (4h+)",
+        }
+        msg_parts.append(f"📐 Complejidad: {complexity_names.get(complexity, complexity.value)}")
+
+    if energy:
+        energy_names = {
+            TaskEnergy.DEEP_WORK: "🧠 Deep Work",
+            TaskEnergy.MEDIUM: "💪 Medium",
+            TaskEnergy.LOW: "😴 Low",
+        }
+        msg_parts.append(f"⚡ Energía: {energy_names.get(energy, energy.value)}")
+
+    if time_block:
+        block_names = {
+            TaskTimeBlock.MORNING: "🌅 Morning",
+            TaskTimeBlock.AFTERNOON: "☀️ Afternoon",
+            TaskTimeBlock.EVENING: "🌆 Evening",
+        }
+        msg_parts.append(f"🕐 Bloque: {block_names.get(time_block, time_block.value)}")
+
+    if estimated_minutes:
+        hours = estimated_minutes // 60
+        mins = estimated_minutes % 60
+        time_str = f"{hours}h {mins}m" if hours else f"{mins}m"
+        msg_parts.append(f"⏱️ Tiempo est: {time_str}")
 
     await query.edit_message_text(
-        f"✅ <b>Tarea creada</b>\n\n"
-        f"<i>{created.title}</i>\n\n"
-        f"Estado: 🎯 Hoy\n"
-        f"Prioridad: {priority_emoji}",
+        "\n".join(msg_parts),
         parse_mode="HTML",
     )
 
@@ -970,6 +1115,154 @@ async def handle_reminder_dismiss(query, context, reminder_id: int | None) -> No
         )
     else:
         await query.edit_message_text("❌ No se pudo descartar el recordatorio.")
+
+
+# ==================== WORKOUT CALLBACKS ====================
+
+
+async def handle_workout_type_callback(query, context, workout_type: str) -> None:
+    """Registra un workout con el tipo seleccionado."""
+    from datetime import date
+    from app.agents.workout_logger import WorkoutLoggerAgent, WorkoutType
+
+    pending = context.user_data.get("pending_workout", "")
+    if not pending:
+        await query.edit_message_text("❌ No hay workout pendiente.")
+        return
+
+    # Mapear tipo
+    type_map = {
+        "push": WorkoutType.PUSH,
+        "pull": WorkoutType.PULL,
+        "legs": WorkoutType.LEGS,
+        "cardio": WorkoutType.CARDIO,
+    }
+    wtype = type_map.get(workout_type.lower(), WorkoutType.PUSH)
+
+    await query.edit_message_text(
+        f"🏋️ <b>Registrando {wtype.value}...</b>\n\n⏳ Analizando ejercicios...",
+        parse_mode="HTML",
+    )
+
+    try:
+        # Usar WorkoutLogger para analizar
+        logger_agent = WorkoutLoggerAgent()
+        result = await logger_agent.log_workout(
+            workout_description=pending,
+            workout_type=wtype,
+        )
+
+        # Guardar en Notion
+        notion = get_notion_service()
+        fecha_hoy = date.today().strftime("%Y-%m-%d")
+
+        # Convertir ejercicios a JSON para Notion
+        ejercicios_json = logger_agent.to_notion_json(result.exercises)
+
+        # Guardar en Notion
+        await notion.log_workout(
+            fecha=fecha_hoy,
+            tipo=wtype.value,
+            ejercicios=ejercicios_json,
+            prs=", ".join(result.new_prs) if result.new_prs else None,
+            notas=result.feedback,
+        )
+
+        # Formatear respuesta
+        message = logger_agent.format_telegram_message(result)
+
+        await query.edit_message_text(
+            message,
+            parse_mode="HTML",
+        )
+
+        # Limpiar pending
+        context.user_data.pop("pending_workout", None)
+
+    except Exception as e:
+        logger.error(f"Error registrando workout: {e}")
+        await query.edit_message_text(
+            f"❌ Error registrando workout: {str(e)[:100]}"
+        )
+
+
+async def handle_nutrition_category_callback(query, context, category: str) -> None:
+    """Registra una comida con la categoría seleccionada manualmente."""
+    from datetime import date
+    from app.services.notion import NutritionCategoria
+
+    pending = context.user_data.get("pending_nutrition", {})
+    if not pending:
+        await query.edit_message_text("❌ No hay comida pendiente.")
+        return
+
+    meal = pending.get("meal", "comida")
+    food = pending.get("food", "")
+
+    # Mapear categoría
+    cat_map = {
+        "saludable": NutritionCategoria.SALUDABLE,
+        "moderado": NutritionCategoria.MODERADO,
+        "pesado": NutritionCategoria.PESADO,
+    }
+    cat = cat_map.get(category.lower(), NutritionCategoria.MODERADO)
+
+    # Estimar calorías basadas en categoría
+    cal_estimates = {
+        NutritionCategoria.SALUDABLE: 400,
+        NutritionCategoria.MODERADO: 600,
+        NutritionCategoria.PESADO: 900,
+    }
+    calories = cal_estimates.get(cat, 500)
+
+    try:
+        # Guardar en Notion
+        notion = get_notion_service()
+        fecha_hoy = date.today().isoformat()
+
+        # Mapear tipo de comida a parámetros correctos
+        meal_lower = meal.lower()
+        nutrition_params = {"fecha": fecha_hoy}
+
+        if "desayuno" in meal_lower or "breakfast" in meal_lower:
+            nutrition_params["desayuno"] = food
+            nutrition_params["desayuno_cal"] = calories
+            nutrition_params["desayuno_cat"] = cat
+        elif "almuerzo" in meal_lower or "comida" in meal_lower or "lunch" in meal_lower:
+            nutrition_params["comida"] = food
+            nutrition_params["comida_cal"] = calories
+            nutrition_params["comida_cat"] = cat
+        elif "cena" in meal_lower or "dinner" in meal_lower:
+            nutrition_params["cena"] = food
+            nutrition_params["cena_cal"] = calories
+            nutrition_params["cena_cat"] = cat
+        else:
+            nutrition_params["snacks"] = food
+            nutrition_params["snacks_cal"] = calories
+
+        await notion.log_nutrition(**nutrition_params)
+
+        cat_emoji = {
+            NutritionCategoria.SALUDABLE: "🟢",
+            NutritionCategoria.MODERADO: "🟡",
+            NutritionCategoria.PESADO: "🔴",
+        }.get(cat, "🟡")
+
+        await query.edit_message_text(
+            f"✅ <b>{meal.capitalize()} registrada</b>\n\n"
+            f"{cat_emoji} Categoría: {cat.value}\n"
+            f"🔥 Calorías estimadas: ~{calories}",
+            parse_mode="HTML",
+        )
+
+        # Limpiar pending
+        context.user_data.pop("pending_nutrition", None)
+
+    except Exception as e:
+        logger.error(f"Error registrando nutrición: {e}")
+        await query.edit_message_text(
+            f"❌ Error registrando comida: {str(e)[:100]}"
+        )
 
 
 # ==================== APPLICATION SETUP ====================

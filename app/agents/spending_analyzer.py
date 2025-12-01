@@ -5,9 +5,38 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 
-from app.agents.base import BaseAgent, SpendingAnalyzer as SpendingModule
+import dspy
+
+from app.agents.base import BaseAgent
 
 logger = logging.getLogger(__name__)
+
+
+class AnalyzeSpending(dspy.Signature):
+    """Analiza una compra potencial."""
+
+    purchase_description: str = dspy.InputField(
+        desc="Descripción del item y precio"
+    )
+    monthly_budget: float = dspy.InputField(
+        desc="Presupuesto mensual disponible"
+    )
+    current_debt: float = dspy.InputField(
+        desc="Deuda actual total"
+    )
+
+    necessity_score: int = dspy.OutputField(
+        desc="Puntuación de necesidad de 1-10"
+    )
+    budget_impact: str = dspy.OutputField(
+        desc="Impacto en el presupuesto: minimal, moderate, significant, critical"
+    )
+    recommendation: str = dspy.OutputField(
+        desc="Recomendación: buy, wait, wishlist, skip"
+    )
+    honest_questions: str = dspy.OutputField(
+        desc="2-3 preguntas honestas para reflexionar sobre la compra"
+    )
 
 
 class SpendingRecommendation(str, Enum):
@@ -52,7 +81,7 @@ class SpendingAnalyzerAgent(BaseAgent):
         current_debt: float = 0.0,
     ):
         super().__init__()
-        self.analyzer = SpendingModule()
+        self.analyzer = dspy.ChainOfThought(AnalyzeSpending)
         self.monthly_budget = monthly_budget
         self.current_debt = current_debt
 

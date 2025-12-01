@@ -226,14 +226,35 @@ class NutritionLogHandler(BaseIntentHandler):
             }.get(category, "🟡")
 
             # Guardar en Notion
+            from datetime import date
             notion = get_notion_service()
-            await notion.log_nutrition(
-                tipo_comida=meal,
-                descripcion=food,
-                calorias=calories,
-                categoria=category,
-                proteinas=protein,
-            )
+            fecha_hoy = date.today().isoformat()
+
+            # Mapear tipo de comida a parámetros correctos
+            meal_lower = meal.lower()
+            nutrition_params = {"fecha": fecha_hoy}
+
+            if "desayuno" in meal_lower or "breakfast" in meal_lower:
+                nutrition_params["desayuno"] = food
+                nutrition_params["desayuno_cal"] = calories
+                nutrition_params["desayuno_cat"] = category
+            elif "almuerzo" in meal_lower or "comida" in meal_lower or "lunch" in meal_lower:
+                nutrition_params["comida"] = food
+                nutrition_params["comida_cal"] = calories
+                nutrition_params["comida_cat"] = category
+            elif "cena" in meal_lower or "dinner" in meal_lower:
+                nutrition_params["cena"] = food
+                nutrition_params["cena_cal"] = calories
+                nutrition_params["cena_cat"] = category
+            else:
+                # Snacks o cualquier otro
+                nutrition_params["snacks"] = food
+                nutrition_params["snacks_cal"] = calories
+
+            # Indicar si tuvo suficiente proteína
+            nutrition_params["proteina_ok"] = protein >= 20
+
+            await notion.log_nutrition(**nutrition_params)
 
             message = (
                 f"✅ <b>{meal.capitalize()} registrada</b>\n\n"
