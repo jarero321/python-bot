@@ -73,9 +73,13 @@ class TaskEnricher(BaseEnricher):
         result = EnrichmentResult(enricher_name=self.name)
         task_title = entities.get("task", message)
 
+        logger.info(f"TaskEnricher: Enriqueciendo tarea '{task_title[:50]}'")
+
         # 1. Analizar complejidad
         try:
+            logger.info("TaskEnricher: Ejecutando ComplexityAnalyzer...")
             complexity_result = await self.complexity_analyzer.analyze_task(task_title)
+            logger.info(f"TaskEnricher: ComplexityAnalyzer OK - {complexity_result.complexity.value}, {complexity_result.estimated_minutes}min")
             result.complexity = {
                 "level": complexity_result.complexity.value,
                 "estimated_minutes": complexity_result.estimated_minutes,
@@ -88,8 +92,9 @@ class TaskEnricher(BaseEnricher):
             result.subtasks = complexity_result.suggested_subtasks or []
             result.blockers = complexity_result.potential_blockers or []
             result.agents_used.append("ComplexityAnalyzer")
+            logger.info(f"TaskEnricher: Subtareas={len(result.subtasks)}, Blockers={len(result.blockers)}")
         except Exception as e:
-            self.logger.warning(f"Error en ComplexityAnalyzer: {e}")
+            logger.error(f"TaskEnricher: Error en ComplexityAnalyzer: {e}", exc_info=True)
 
         # 2. Detectar urgencia
         urgency_score = self._calculate_urgency_score(message)
@@ -148,6 +153,13 @@ class TaskEnricher(BaseEnricher):
                 result.agents_used.append("ProjectMatcher")
         except Exception as e:
             self.logger.warning(f"Error detectando proyecto: {e}")
+
+        # Log final del resultado
+        logger.info(
+            f"TaskEnricher RESULTADO: complexity={result.complexity}, "
+            f"subtasks={len(result.subtasks)}, priority={result.suggested_priority}, "
+            f"project={result.project_match.get('name') if result.project_match else None}"
+        )
 
         return result
 
