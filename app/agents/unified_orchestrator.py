@@ -272,10 +272,20 @@ class UnifiedOrchestrator:
     ) -> OrchestratorResponse | None:
         """Procesa mensaje en contexto de entidad activa."""
         import re
+        from app.services.notion import get_notion_service
+
+        msg_lower = message.lower()
+
+        # Solo procesar si hay una tarea activa
+        if not ctx.active_entity or ctx.active_entity.entity_type != EntityType.TASK:
+            return None
+
+        task_id = ctx.active_entity.entity_id
+        task_name = ctx.active_entity.entity_name
 
         # Detectar modificación de subtareas: "quita la 3"
-        remove_match = re.search(r"(?:quita|elimina|borra)\s+(?:la|el)?\s*(\d+)", message.lower())
-        if remove_match and ctx.active_entity and ctx.active_entity.suggested_subtasks:
+        remove_match = re.search(r"(?:quita|elimina|borra)\s+(?:la|el)?\s*(\d+)", msg_lower)
+        if remove_match and ctx.active_entity.suggested_subtasks:
             idx = int(remove_match.group(1))
             subtasks = ctx.active_entity.suggested_subtasks
 
@@ -293,6 +303,136 @@ class UnifiedOrchestrator:
                     is_contextual=True,
                     already_handled=True,
                 )
+
+        # Detectar asignación de proyecto: "añádela al proyecto X", "ponla en proyecto X"
+        project_match = re.search(
+            r"(?:añ[aá]de(?:la|lo)?|pon(?:la|lo)?|asign[aá](?:la|lo)?|mueve(?:la|lo)?|agr[eé]ga(?:la|lo)?)\s+(?:al?|en|a)\s+(?:el\s+)?(?:proyecto\s+)?(.+)",
+            msg_lower
+        )
+        if project_match and task_id:
+            project_name_query = project_match.group(1).strip()
+            # Limpiar palabras comunes
+            project_name_query = re.sub(r"^(el|la|los|las)\s+", "", project_name_query)
+
+            # Buscar el proyecto
+            notion = get_notion_service()
+            raw_projects = await notion.get_projects(active_only=True, use_cache=False)
+
+            found_project = None
+            for raw_project in raw_projects:
+                try:
+                    title_prop = raw_project.get("properties", {}).get("Proyecto", {})
+                    title_list = title_prop.get("title", [])
+                    name = title_list[0].get("plain_text", "") if title_list else ""
+
+                    if project_name_query.lower() in name.lower() or name.lower() in project_name_query.lower():
+                        found_project = {
+                            "id": raw_project.get("id"),
+                            "name": name,
+                        }
+                        break
+                except (KeyError, IndexError):
+                    continue
+
+            if found_project:
+                # Actualizar la tarea en Notion
+                try:
+                    await notion.client.pages.update(
+                        page_id=task_id,
+                        properties={
+                            "Proyecto": {"relation": [{"id": found_project["id"]}]}
+                        }
+                    )
+
+                    # Actualizar contexto
+                    ctx.active_entity.entity_data["project_id"] = found_project["id"]
+                    ctx.active_entity.entity_data["project_name"] = found_project["name"]
+
+                    return OrchestratorResponse(
+                        message=f"✅ <b>Proyecto asignado</b>\n\n<i>{task_name}</i>\n📁 {found_project['name']}",
+                        intent=UserIntent.TASK_UPDATE,
+                        is_contextual=True,
+                        already_handled=True,
+                    )
+                except Exception as e:
+                    logger.error(f"Error asignando proyecto: {e}")
+            else:
+                # Listar proyectos disponibles
+                project_names = []
+                for rp in raw_projects[:5]:
+                    try:
+                        tp = rp.get("properties", {}).get("Proyecto", {})
+                        tl = tp.get("title", [])
+                        pn = tl[0].get("plain_text", "") if tl else ""
+                        if pn:
+                            project_names.append(f"• {pn}")
+                    except:
+                        pass
+
+                projects_list = "\n".join(project_names) if project_names else "No hay proyectos activos"
+
+                return OrchestratorResponse(
+                    message=f"❌ No encontré el proyecto \"{project_name_query}\".\n\n<b>Proyectos disponibles:</b>\n{projects_list}",
+                    intent=UserIntent.TASK_UPDATE,
+                    is_contextual=True,
+                    already_handled=True,
+                )
+
+        # Detectar cambio de prioridad: "ponla urgente", "hazla alta prioridad"
+        priority_match = re.search(
+            r"(?:pon(?:la|lo)?|haz(?:la|lo)?|cambia(?:la|lo)?|marca(?:la|lo)?)\s+(?:como\s+)?(?:a\s+)?(?:prioridad\s+)?(urgente|alta|normal|baja)",
+            msg_lower
+        )
+        if priority_match and task_id:
+            priority_str = priority_match.group(1)
+            priority_map = {
+                "urgente": "Urgente",
+                "alta": "Alta",
+                "normal": "Normal",
+                "baja": "Baja",
+            }
+            notion_priority = priority_map.get(priority_str, "Normal")
+
+            try:
+                notion = get_notion_service()
+                await notion.client.pages.update(
+                    page_id=task_id,
+                    properties={
+                        "Prioridad": {"select": {"name": notion_priority}}
+                    }
+                )
+
+                emoji_map = {"Urgente": "🔥", "Alta": "⚡", "Normal": "🔄", "Baja": "🧊"}
+
+                return OrchestratorResponse(
+                    message=f"✅ <b>Prioridad actualizada</b>\n\n<i>{task_name}</i>\n{emoji_map.get(notion_priority, '')} {notion_priority}",
+                    intent=UserIntent.TASK_UPDATE,
+                    is_contextual=True,
+                    already_handled=True,
+                )
+            except Exception as e:
+                logger.error(f"Error cambiando prioridad: {e}")
+
+        # Detectar inicio de tarea: "empieza", "hazla", "trabaja en ella"
+        start_match = re.search(r"^(?:empieza|empezar|empié?zala|trabaja|inicia(?:la)?|comienza)(?:\s|$)", msg_lower)
+        if start_match and task_id:
+            try:
+                notion = get_notion_service()
+                await notion.client.pages.update(
+                    page_id=task_id,
+                    properties={
+                        "Estado": {"select": {"name": "Doing"}}
+                    }
+                )
+
+                return OrchestratorResponse(
+                    message=f"▶️ <b>Tarea iniciada</b>\n\n<i>{task_name}</i>\n\n¡A trabajar! 💪",
+                    intent=UserIntent.TASK_STATUS_CHANGE,
+                    is_contextual=True,
+                    already_handled=True,
+                )
+            except Exception as e:
+                logger.error(f"Error iniciando tarea: {e}")
 
         return None
 
