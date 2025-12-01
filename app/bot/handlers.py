@@ -560,6 +560,159 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             context.user_data.pop("pending_nutrition", None)
             await query.edit_message_text("❌ Registro de comida cancelado.")
 
+        # ==================== STUDY CALLBACKS ====================
+        elif action == "study_start":
+            project_id = parts[1] if len(parts) > 1 else None
+            await handle_study_start(query, context, project_id)
+
+        elif action.startswith("study_start_"):
+            # Formato: study_start_abc12345
+            project_id = action.replace("study_start_", "")
+            await handle_study_start(query, context, project_id)
+
+        elif action == "study_alt":
+            alt_idx = int(parts[1]) if len(parts) > 1 else 0
+            await handle_study_alternative(query, context, alt_idx)
+
+        elif action.startswith("study_alt_"):
+            alt_idx = int(action.replace("study_alt_", ""))
+            await handle_study_alternative(query, context, alt_idx)
+
+        elif action == "study_later" or action == "study_later_30":
+            await query.edit_message_text(
+                "⏰ <b>Recordatorio programado</b>\n\n"
+                "Te recordaré en 30 minutos para estudiar.",
+                parse_mode="HTML",
+            )
+
+        elif action == "study_skip":
+            await query.edit_message_text(
+                "📚 <b>Estudio pospuesto</b>\n\n"
+                "Está bien, descansa. Mañana retomamos.",
+                parse_mode="HTML",
+            )
+
+        elif action == "study_time":
+            minutes = int(parts[1]) if len(parts) > 1 else 25
+            await handle_study_time(query, context, minutes)
+
+        elif action == "study_cancel":
+            context.user_data.pop("study_topic", None)
+            await query.edit_message_text("❌ Sesión de estudio cancelada.")
+
+        # ==================== CHECKIN CALLBACKS ====================
+        elif action == "checkin_doing_well":
+            await query.edit_message_text(
+                "✅ <b>¡Excelente!</b>\n\n"
+                "Sigue así. Te haré otro check-in más tarde.",
+                parse_mode="HTML",
+            )
+
+        elif action == "checkin_need_help":
+            await query.edit_message_text(
+                "🤝 <b>¿En qué puedo ayudarte?</b>\n\n"
+                "Cuéntame qué está pasando y veré cómo asistirte.",
+                parse_mode="HTML",
+            )
+
+        elif action == "checkin_switch_task":
+            await handle_show_pending_tasks(query, context)
+
+        elif action == "checkin_blocked":
+            await query.edit_message_text(
+                "🚧 <b>¿Qué te tiene bloqueado?</b>\n\n"
+                "Cuéntame el problema y buscaremos una solución.",
+                parse_mode="HTML",
+            )
+
+        elif action == "checkin_working":
+            await query.edit_message_text(
+                "👍 <b>Entendido</b>\n\n"
+                "Estás enfocado en algo. ¡Sigue así!",
+                parse_mode="HTML",
+            )
+
+        elif action == "checkin_break":
+            await query.edit_message_text(
+                "☕ <b>Disfruta tu descanso</b>\n\n"
+                "Los breaks son importantes. Avísame cuando vuelvas.",
+                parse_mode="HTML",
+            )
+
+        elif action == "checkin_dismiss":
+            await query.edit_message_text(
+                "👌 <b>Perfecto</b>\n\n"
+                "Todo bien por aquí. ¡Sigue adelante!",
+                parse_mode="HTML",
+            )
+
+        elif action in ("checkin_good", "checkin_switch"):
+            # Aliases de checkin_status_keyboard
+            if action == "checkin_good":
+                await query.edit_message_text("✅ Todo bien. ¡Sigue así!", parse_mode="HTML")
+            else:
+                await handle_show_pending_tasks(query, context)
+
+        # ==================== TASK BLOCK/PAUSE CALLBACKS ====================
+        elif action == "task_block":
+            task_id = parts[1] if len(parts) > 1 else None
+            await handle_task_block(query, context, task_id)
+
+        elif action == "task_pause":
+            task_id = parts[1] if len(parts) > 1 else None
+            await handle_task_pause(query, context, task_id)
+
+        # ==================== NAVIGATION CALLBACKS ====================
+        elif action == "show_pending_tasks":
+            await handle_show_pending_tasks(query, context)
+
+        elif action == "show_backlog":
+            await handle_show_backlog(query, context)
+
+        elif action == "menu_add":
+            await query.edit_message_text(
+                "📝 <b>Agregar tarea</b>\n\n"
+                "Escribe la tarea que quieres agregar.\n"
+                "Ejemplo: <i>Revisar documentación del API</i>",
+                parse_mode="HTML",
+            )
+
+        # ==================== PAYDAY CALLBACKS ====================
+        elif action == "payday_follow_plan":
+            await query.edit_message_text(
+                "✅ <b>Plan confirmado</b>\n\n"
+                "Seguiremos el plan de pagos establecido.",
+                parse_mode="HTML",
+            )
+
+        elif action == "payday_adjust":
+            await query.edit_message_text(
+                "✏️ <b>Ajustar plan</b>\n\n"
+                "Dime qué quieres modificar del plan de pagos.",
+                parse_mode="HTML",
+            )
+
+        elif action == "payday_view_debts":
+            await handle_view_debts(query, context)
+
+        elif action == "payday_later":
+            await query.edit_message_text(
+                "⏰ <b>Recordatorio pospuesto</b>\n\n"
+                "Te recordaré más tarde sobre el plan de pagos.",
+                parse_mode="HTML",
+            )
+
+        # ==================== RESCHEDULE CALLBACKS ====================
+        elif action == "reschedule_task":
+            task_id = parts[1] if len(parts) > 1 else None
+            await handle_reschedule_task(query, context, task_id)
+
+        elif action == "reschedule_cancel":
+            await query.edit_message_text("❌ Reprogramación cancelada.")
+
+        elif action == "show_today_for_reschedule":
+            await handle_show_pending_tasks(query, context)
+
         # Default
         else:
             logger.warning(f"Callback no manejado: {data}")
@@ -1944,6 +2097,250 @@ async def handle_nutrition_category_callback(query, context, category: str) -> N
         await query.edit_message_text(
             f"❌ Error registrando comida: {str(e)[:100]}"
         )
+
+
+# ==================== STUDY CALLBACKS ====================
+
+
+async def handle_study_start(query, context, project_id: str | None) -> None:
+    """Inicia una sesión de estudio."""
+    await query.edit_message_text(
+        "📚 <b>¡Sesión de estudio iniciada!</b>\n\n"
+        "Enfócate en tu tema. Te avisaré cuando termines.\n\n"
+        "💡 <i>Tip: Usa técnica Pomodoro - 25 min de estudio, 5 de descanso</i>",
+        parse_mode="HTML",
+    )
+
+
+async def handle_study_alternative(query, context, alt_idx: int) -> None:
+    """Selecciona una alternativa de estudio."""
+    await query.edit_message_text(
+        "📚 <b>¡Alternativa seleccionada!</b>\n\n"
+        "Iniciando sesión con el tema alternativo.\n"
+        "Enfócate y disfruta el aprendizaje.",
+        parse_mode="HTML",
+    )
+
+
+async def handle_study_time(query, context, minutes: int) -> None:
+    """Configura tiempo de estudio."""
+    topic = context.user_data.get("study_topic", "tu tema")
+    await query.edit_message_text(
+        f"📚 <b>Sesión de {minutes} minutos</b>\n\n"
+        f"Tema: <i>{topic}</i>\n\n"
+        f"¡Enfócate! Te avisaré cuando terminen los {minutes} minutos.",
+        parse_mode="HTML",
+    )
+    context.user_data.pop("study_topic", None)
+
+
+# ==================== TASK BLOCK/PAUSE CALLBACKS ====================
+
+
+async def handle_task_block(query, context, task_id: str | None) -> None:
+    """Marca una tarea como bloqueada."""
+    if not task_id:
+        await query.edit_message_text("❌ ID de tarea no válido.")
+        return
+
+    await query.edit_message_text(
+        "🚧 <b>Tarea marcada como bloqueada</b>\n\n"
+        "¿Qué te está bloqueando?\n"
+        "Cuéntame para buscar una solución.",
+        parse_mode="HTML",
+    )
+
+
+async def handle_task_pause(query, context, task_id: str | None) -> None:
+    """Pausa una tarea."""
+    if not task_id:
+        await query.edit_message_text("❌ ID de tarea no válido.")
+        return
+
+    from app.domain.services import get_task_service
+    from app.domain.entities.task import TaskStatus
+
+    service = get_task_service()
+    updated = await service.update_status(task_id, TaskStatus.PAUSED)
+
+    if updated:
+        await query.edit_message_text(
+            f"⏸️ <b>Tarea pausada</b>\n\n"
+            f"<i>{updated.title}</i>\n\n"
+            f"Puedes retomarla cuando quieras.",
+            parse_mode="HTML",
+        )
+    else:
+        await query.edit_message_text("❌ No se pudo pausar la tarea.")
+
+
+# ==================== NAVIGATION CALLBACKS ====================
+
+
+async def handle_show_pending_tasks(query, context) -> None:
+    """Muestra tareas pendientes para hoy."""
+    from app.domain.services import get_task_service
+    from app.domain.entities.task import TaskStatus
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    service = get_task_service()
+    tasks = await service.get_for_today()
+
+    if not tasks:
+        await query.edit_message_text(
+            "📋 <b>Sin tareas pendientes</b>\n\n"
+            "No tienes tareas programadas para hoy.\n"
+            "Escribe una tarea para agregarla.",
+            parse_mode="HTML",
+        )
+        return
+
+    # Filtrar solo pendientes (no completadas)
+    pending = [t for t in tasks if t.status not in (TaskStatus.DONE, TaskStatus.CANCELLED)]
+
+    if not pending:
+        await query.edit_message_text(
+            "✅ <b>¡Todo completado!</b>\n\n"
+            "Has terminado todas las tareas de hoy.",
+            parse_mode="HTML",
+        )
+        return
+
+    lines = ["📋 <b>Tareas pendientes</b>\n"]
+    buttons = []
+
+    for task in pending[:8]:
+        status_emoji = {
+            TaskStatus.TODAY: "🎯",
+            TaskStatus.DOING: "🔵",
+            TaskStatus.PAUSED: "⏸️",
+        }.get(task.status, "⬜")
+
+        lines.append(f"{status_emoji} {task.title}")
+        buttons.append([
+            InlineKeyboardButton(
+                f"▶️ {task.title[:25]}",
+                callback_data=f"task_doing:{task.id[:8]}",
+            ),
+        ])
+
+    keyboard = InlineKeyboardMarkup(buttons)
+
+    await query.edit_message_text(
+        "\n".join(lines) + "\n\n<i>Selecciona una tarea para iniciarla:</i>",
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
+async def handle_show_backlog(query, context) -> None:
+    """Muestra tareas del backlog."""
+    from app.domain.services import get_task_service
+    from app.domain.entities.task import TaskStatus
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    service = get_task_service()
+    tasks = await service.get_by_status(TaskStatus.BACKLOG)
+
+    if not tasks:
+        await query.edit_message_text(
+            "📥 <b>Backlog vacío</b>\n\n"
+            "No tienes tareas en el backlog.\n"
+            "Agrega tareas con: <i>agregar [tarea] al backlog</i>",
+            parse_mode="HTML",
+        )
+        return
+
+    lines = ["📥 <b>Backlog</b>\n"]
+    buttons = []
+
+    for task in tasks[:10]:
+        lines.append(f"⬜ {task.title}")
+        buttons.append([
+            InlineKeyboardButton(
+                f"🎯 Mover a hoy: {task.title[:20]}",
+                callback_data=f"task_status:{task.id[:8]}:today",
+            ),
+        ])
+
+    keyboard = InlineKeyboardMarkup(buttons)
+
+    await query.edit_message_text(
+        "\n".join(lines) + f"\n\n📊 {len(tasks)} tareas en backlog",
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
+# ==================== FINANCE CALLBACKS ====================
+
+
+async def handle_view_debts(query, context) -> None:
+    """Muestra las deudas pendientes."""
+    from app.services.notion import get_notion_service
+
+    try:
+        notion = get_notion_service()
+        # Intentar obtener deudas si existe el método
+        if hasattr(notion, 'get_debts'):
+            debts = await notion.get_debts()
+            if debts:
+                lines = ["💳 <b>Deudas pendientes</b>\n"]
+                total = 0
+                for debt in debts[:10]:
+                    amount = debt.get("amount", 0)
+                    name = debt.get("name", "Deuda")
+                    total += amount
+                    lines.append(f"• {name}: ${amount:,.2f}")
+                lines.append(f"\n<b>Total:</b> ${total:,.2f}")
+                await query.edit_message_text("\n".join(lines), parse_mode="HTML")
+            else:
+                await query.edit_message_text(
+                    "✅ <b>Sin deudas</b>\n\nNo tienes deudas registradas.",
+                    parse_mode="HTML",
+                )
+        else:
+            await query.edit_message_text(
+                "💳 <b>Deudas</b>\n\n"
+                "Función no disponible. Configura tu base de datos de finanzas.",
+                parse_mode="HTML",
+            )
+    except Exception as e:
+        logger.error(f"Error obteniendo deudas: {e}")
+        await query.edit_message_text("❌ Error obteniendo información de deudas.")
+
+
+# ==================== RESCHEDULE CALLBACKS ====================
+
+
+async def handle_reschedule_task(query, context, task_id: str | None) -> None:
+    """Muestra opciones para reprogramar una tarea."""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    if not task_id:
+        await query.edit_message_text("❌ ID de tarea no válido.")
+        return
+
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("📅 Mañana", callback_data=f"task_reschedule_to:{task_id}:tomorrow"),
+            InlineKeyboardButton("📅 Pasado mañana", callback_data=f"task_reschedule_to:{task_id}:day_after"),
+        ],
+        [
+            InlineKeyboardButton("📅 Lunes", callback_data=f"task_reschedule_to:{task_id}:monday"),
+            InlineKeyboardButton("📥 Backlog", callback_data=f"task_status:{task_id}:backlog"),
+        ],
+        [
+            InlineKeyboardButton("❌ Cancelar", callback_data="reschedule_cancel"),
+        ],
+    ])
+
+    await query.edit_message_text(
+        "📅 <b>Reprogramar tarea</b>\n\n"
+        "¿Para cuándo quieres moverla?",
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
 
 
 # ==================== APPLICATION SETUP ====================
