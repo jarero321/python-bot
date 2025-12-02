@@ -7,6 +7,9 @@ la lógica de negocio de la persistencia (Notion).
 Estructura:
     - entities/: Dataclasses que representan el dominio
     - repositories/: Interfaces y implementaciones de persistencia
+
+NOTA: Los repositories NO se exportan aquí para evitar imports circulares.
+Importar directamente de app.domain.repositories cuando se necesiten.
 """
 
 from app.domain.entities import (
@@ -19,13 +22,6 @@ from app.domain.entities import (
     Transaction,
     Debt,
 )
-from app.domain.repositories import (
-    ITaskRepository,
-    IProjectRepository,
-    IReminderRepository,
-    get_task_repository,
-    get_project_repository,
-)
 
 __all__ = [
     # Entities
@@ -37,10 +33,4 @@ __all__ = [
     "NutritionEntry",
     "Transaction",
     "Debt",
-    # Repositories
-    "ITaskRepository",
-    "IProjectRepository",
-    "IReminderRepository",
-    "get_task_repository",
-    "get_project_repository",
 ]
