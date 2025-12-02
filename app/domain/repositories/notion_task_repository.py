@@ -211,6 +211,15 @@ class NotionTaskRepository(ITaskRepository):
         subtareas_prop = props.get("Subtareas", {}).get("relation", [])
         subtask_ids = [st.get("id") for st in subtareas_prop] if subtareas_prop else []
 
+        # Extraer información de bloqueo
+        bloqueada = props.get("Bloqueada", {}).get("checkbox", False)
+        blocker_prop = props.get("Blocker", {}).get("rich_text", [])
+        blocker_reason = blocker_prop[0].get("text", {}).get("content", "") if blocker_prop else None
+
+        # Extraer tarea bloqueante (relación "Bloqueada por" si existe)
+        bloqueada_por_prop = props.get("Bloqueada por", {}).get("relation", [])
+        blocked_by_id = bloqueada_por_prop[0].get("id") if bloqueada_por_prop else None
+
         return Task(
             id=notion_data.get("id", ""),
             title=title,
@@ -225,6 +234,8 @@ class NotionTaskRepository(ITaskRepository):
             context=contexto,
             notes=notas,
             subtask_ids=subtask_ids,
+            blocked_by_id=blocked_by_id,
+            blocker_reason=blocker_reason if bloqueada else None,
             created_at=datetime.fromisoformat(
                 notion_data.get("created_time", "").replace("Z", "+00:00")
             ) if notion_data.get("created_time") else None,
@@ -276,8 +287,18 @@ class NotionTaskRepository(ITaskRepository):
         if task.project_id:
             properties["Proyecto"] = {"relation": [{"id": task.project_id}]}
 
+        if task.context:
+            properties["Contexto"] = {"select": {"name": task.context}}
+
         if task.notes:
             properties["Notas"] = {"rich_text": [{"text": {"content": task.notes}}]}
+
+        # Campos de bloqueo/dependencia
+        if task.blocked_by_id:
+            properties["Bloqueada por"] = {"relation": [{"id": task.blocked_by_id}]}
+            properties["Bloqueada"] = {"checkbox": True}
+        if task.blocker_reason:
+            properties["Blocker"] = {"rich_text": [{"text": {"content": task.blocker_reason}}]}
 
         return properties
 

@@ -188,13 +188,20 @@ class TaskCreateHandler(BaseIntentHandler):
         suggested_dates = entities.get("_dates", {})
         reminders = entities.get("_reminders", [])
 
+        # Campos nuevos del enriquecimiento
+        suggested_time_block = entities.get("_time_block")
+        workload_analysis = entities.get("_workload")
+        workload_warning = entities.get("_workload_warning")
+        blocked_by_id = entities.get("_blocked_by_id")
+        blocked_by_name = entities.get("_blocked_by_name")
+
         # Verificar duplicados con RAG
         duplicate_check = await self._service.check_duplicate(task_title)
 
         # Obtener proyecto relacionado del enriquecimiento
         project_match = entities.get("_project")
 
-        # Guardar en context para cuando confirme (incluir enriquecimiento)
+        # Guardar en context para cuando confirme (incluir TODO el enriquecimiento)
         context.user_data["pending_task"] = {
             "title": task_title,
             "priority": entities.get("priority", "normal"),
@@ -206,6 +213,12 @@ class TaskCreateHandler(BaseIntentHandler):
             "blockers": blockers,
             "reminders": reminders,
             "project_match": project_match,
+            # Campos nuevos que NO se estaban pasando
+            "suggested_time_block": suggested_time_block,
+            "workload_analysis": workload_analysis,
+            "workload_warning": workload_warning,
+            "blocked_by_id": blocked_by_id,
+            "blocked_by_name": blocked_by_name,
         }
 
         # Si hay duplicado probable, mostrar advertencia CON enriquecimiento
@@ -593,8 +606,8 @@ class TaskUpdateHandler(BaseIntentHandler):
         )
 
 
-def _truncate_task_title(title: str, max_length: int = 35) -> str:
-    """Trunca título de tarea, permitiendo 2 líneas si es necesario."""
+def _truncate_task_title(title: str, max_length: int = 50) -> str:
+    """Trunca título de tarea para botones de Telegram."""
     if len(title) <= max_length:
         return title
     # Buscar un espacio para cortar de forma natural

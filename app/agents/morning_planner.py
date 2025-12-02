@@ -65,6 +65,10 @@ class MorningPlannerAgent:
         """
         Crea el plan del día.
 
+        Aplica balance 70/30:
+        - 70% tareas de trabajo (PayCash)
+        - 30% tareas de freelance/personal
+
         Args:
             pending_tasks: Tareas pendientes (backlog, planned, today)
             calendar_events: Eventos del calendario
@@ -89,8 +93,12 @@ class MorningPlannerAgent:
             }
             day_es = day_names_es.get(day_of_week, day_of_week)
 
-            # Formatear tareas pendientes
-            tasks_str = self._format_tasks(pending_tasks)
+            # Pre-seleccionar tareas con balance 70/30 antes de enviar al LLM
+            # Enviamos más tareas (10) pero priorizadas por contexto
+            balanced_tasks = self._select_balanced_tasks(pending_tasks, count=10)
+
+            # Formatear tareas pendientes (ya balanceadas)
+            tasks_str = self._format_tasks(balanced_tasks)
 
             # Formatear eventos
             events_str = "Sin eventos" if not calendar_events else self._format_events(
@@ -285,6 +293,72 @@ class MorningPlannerAgent:
         ]
         return items[:5]  # Máximo 5 items
 
+    def _select_balanced_tasks(self, pending_tasks: list[dict], count: int = 3) -> list[dict]:
+        """
+        Selecciona tareas balanceadas: 70% trabajo, 30% personal/freelance.
+
+        Para count=3: 2 de trabajo, 1 de freelance/personal
+
+        Prioridad de contextos:
+        - Trabajo: PayCash (máxima prioridad)
+        - Freelance: Freelance-PA, Freelance-Google, Workana
+        - Personal: Personal, Estudio
+        """
+        # Definir contextos de trabajo
+        work_contexts = {"PayCash", "paycash", "trabajo", "oficina"}
+        freelance_contexts = {"Freelance-PA", "Freelance-Google", "Workana", "freelance"}
+        personal_contexts = {"Personal", "Estudio", "personal", "estudio"}
+
+        # Clasificar tareas
+        work_tasks = []
+        freelance_tasks = []
+        personal_tasks = []
+
+        for task in pending_tasks:
+            contexto = task.get("contexto", task.get("context", "Personal"))
+            contexto_lower = contexto.lower() if contexto else "personal"
+
+            if contexto in work_contexts or contexto_lower in work_contexts:
+                work_tasks.append(task)
+            elif contexto in freelance_contexts or contexto_lower in freelance_contexts:
+                freelance_tasks.append(task)
+            else:
+                personal_tasks.append(task)
+
+        # Calcular distribución 70/30
+        # Para 3 tareas: 2 trabajo, 1 otros
+        # Para 5 tareas: 3-4 trabajo, 1-2 otros
+        work_count = max(1, int(count * 0.7))  # Al menos 1 de trabajo
+        other_count = count - work_count  # El resto para otros
+
+        selected = []
+
+        # 1. Primero agregar tareas de trabajo (70%)
+        for task in work_tasks[:work_count]:
+            selected.append(task)
+
+        # 2. Luego agregar freelance/personal (30%)
+        other_tasks = freelance_tasks + personal_tasks
+        for task in other_tasks[:other_count]:
+            if task not in selected:
+                selected.append(task)
+
+        # 3. Si faltan tareas, completar con lo que haya
+        remaining_count = count - len(selected)
+        if remaining_count > 0:
+            all_remaining = [t for t in pending_tasks if t not in selected]
+            for task in all_remaining[:remaining_count]:
+                selected.append(task)
+
+        logger.info(
+            f"MorningPlanner: Balance 70/30 - "
+            f"Trabajo: {len([t for t in selected if t in work_tasks])}, "
+            f"Freelance: {len([t for t in selected if t in freelance_tasks])}, "
+            f"Personal: {len([t for t in selected if t in personal_tasks])}"
+        )
+
+        return selected
+
     def _create_fallback_plan(self, pending_tasks: list[dict]) -> MorningPlanResult:
         """Crea un plan básico como fallback."""
         now = datetime.now()
@@ -298,9 +372,11 @@ class MorningPlannerAgent:
         else:
             greeting = "¡Buenas noches! 🌙"
 
-        # Top 3 de las tareas pendientes más prioritarias
+        # Top 3 de las tareas pendientes con balance 70/30
+        balanced_tasks = self._select_balanced_tasks(pending_tasks, count=3)
+
         top_3 = []
-        for i, task in enumerate(pending_tasks[:3], 1):
+        for i, task in enumerate(balanced_tasks, 1):
             top_3.append({
                 "rank": i,
                 "name": task.get("name", task.get("tarea", "Tarea pendiente")),

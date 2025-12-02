@@ -30,13 +30,22 @@ class EnrichmentResult:
     suggested_priority: str | None = None
     suggested_context: str | None = None
     suggested_dates: dict[str, str] | None = None
+    suggested_time_block: str | None = None  # morning, afternoon, evening
 
     # Descomposición
     subtasks: list[str] = field(default_factory=list)
     blockers: list[str] = field(default_factory=list)
 
+    # Dependencias (tarea bloqueada por otra)
+    blocked_by_task_id: str | None = None
+    blocked_by_task_name: str | None = None
+
     # Recordatorios
     reminders: list[dict] = field(default_factory=list)
+
+    # Análisis de carga de trabajo (anti-burnout)
+    workload_analysis: dict[str, Any] | None = None
+    workload_warning: str | None = None  # Mensaje de advertencia si hay sobrecarga
 
     # Finanzas
     financial_analysis: dict[str, Any] | None = None
@@ -73,8 +82,18 @@ class EnrichmentResult:
             result["_context"] = self.suggested_context
         if self.suggested_dates:
             result["_dates"] = self.suggested_dates
+        if self.suggested_time_block:
+            result["_time_block"] = self.suggested_time_block
+        if self.blocked_by_task_id:
+            result["_blocked_by_id"] = self.blocked_by_task_id
+        if self.blocked_by_task_name:
+            result["_blocked_by_name"] = self.blocked_by_task_name
         if self.reminders:
             result["_reminders"] = self.reminders
+        if self.workload_analysis:
+            result["_workload"] = self.workload_analysis
+        if self.workload_warning:
+            result["_workload_warning"] = self.workload_warning
         if self.financial_analysis:
             result["_financial"] = self.financial_analysis
         if self.workout_data:

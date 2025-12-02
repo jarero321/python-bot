@@ -495,6 +495,18 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         elif action == "task_complete_selected":
             await handle_task_complete_selected(query, context)
 
+        # JIRA reminder callbacks
+        elif action == "jira_reminder":
+            task_id = parts[1] if len(parts) > 1 else None
+            await handle_jira_reminder_create(query, context, task_id)
+
+        elif action == "jira_reminder_skip":
+            await query.edit_message_text(
+                "✅ <b>Tarea completada</b>\n\n"
+                "¡Buen trabajo! 🎉",
+                parse_mode="HTML",
+            )
+
         # Project callbacks
         elif action == "project_create_confirm":
             await handle_project_create_confirm(query, context)
@@ -864,12 +876,40 @@ async def handle_task_complete_callback(query, context, task_id: str | None) -> 
     completed = await service.complete(full_task_id)
 
     if completed:
-        await query.edit_message_text(
-            f"✅ <b>Tarea completada</b>\n\n"
-            f"<i>{completed.title}</i>\n\n"
-            f"¡Buen trabajo! 🎉",
-            parse_mode="HTML",
-        )
+        # Verificar si es tarea de trabajo (PayCash) para ofrecer reminder de JIRA
+        is_work_task = completed.context and completed.context.lower() in ["paycash", "trabajo"]
+
+        if is_work_task:
+            # Ofrecer crear reminder de JIRA
+            keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        "📋 Sí, recordar JIRA",
+                        callback_data=f"jira_reminder:{completed.id[:8]}",
+                    ),
+                    InlineKeyboardButton(
+                        "❌ No",
+                        callback_data="jira_reminder_skip",
+                    ),
+                ],
+            ])
+
+            await query.edit_message_text(
+                f"✅ <b>Tarea completada</b>\n\n"
+                f"<i>{completed.title}</i>\n\n"
+                f"¡Buen trabajo! 🎉\n\n"
+                f"💼 <b>Tarea de trabajo detectada</b>\n"
+                f"¿Quieres un reminder para registrar en JIRA al final del día (5 PM)?",
+                parse_mode="HTML",
+                reply_markup=keyboard,
+            )
+        else:
+            await query.edit_message_text(
+                f"✅ <b>Tarea completada</b>\n\n"
+                f"<i>{completed.title}</i>\n\n"
+                f"¡Buen trabajo! 🎉",
+                parse_mode="HTML",
+            )
     else:
         await query.edit_message_text("❌ No se pudo completar la tarea.")
 
@@ -877,7 +917,7 @@ async def handle_task_complete_callback(query, context, task_id: str | None) -> 
 # ==================== MULTI-SELECT TASK CALLBACKS ====================
 
 
-def _truncate_title(title: str, max_length: int = 35) -> str:
+def _truncate_title(title: str, max_length: int = 50) -> str:
     """Trunca título de tarea para mostrar en botones."""
     if len(title) <= max_length:
         return title
@@ -1027,6 +1067,47 @@ async def handle_task_deselect_all(query, context) -> None:
     )
 
 
+async def handle_jira_reminder_create(query, context, task_id: str | None) -> None:
+    """Crea un reminder para registrar en JIRA al final del día."""
+    from datetime import datetime, timedelta
+    from app.db.operations import add_scheduled_reminder
+
+    try:
+        # Programar para las 5 PM de hoy
+        now = datetime.now()
+        reminder_time = now.replace(hour=17, minute=0, second=0, microsecond=0)
+
+        # Si ya pasaron las 5 PM, programar para mañana
+        if now.hour >= 17:
+            reminder_time = reminder_time + timedelta(days=1)
+
+        # Crear el reminder
+        add_scheduled_reminder(
+            title="📋 Registrar tareas en JIRA",
+            message="Recuerda registrar las tareas de trabajo completadas hoy en JIRA",
+            scheduled_time=reminder_time,
+            task_id=task_id,
+            reminder_type="jira",
+        )
+
+        await query.edit_message_text(
+            f"✅ <b>Tarea completada</b>\n\n"
+            f"¡Buen trabajo! 🎉\n\n"
+            f"📋 <b>Reminder de JIRA creado</b>\n"
+            f"Te recordaré a las 5:00 PM para registrar en JIRA.",
+            parse_mode="HTML",
+        )
+
+    except Exception as e:
+        logger.error(f"Error creando reminder de JIRA: {e}")
+        await query.edit_message_text(
+            f"✅ <b>Tarea completada</b>\n\n"
+            f"¡Buen trabajo! 🎉\n\n"
+            f"⚠️ No se pudo crear el reminder de JIRA.",
+            parse_mode="HTML",
+        )
+
+
 async def handle_task_complete_selected(query, context) -> None:
     """Completa todas las tareas seleccionadas."""
     from app.domain.services import get_task_service
@@ -1148,19 +1229,15 @@ async def handle_task_create_confirm(query, context) -> None:
         return
 
     from app.domain.services import get_task_service
-    from app.domain.entities.task import Task, TaskStatus, TaskPriority, TaskComplexity, TaskEnergy, TaskTimeBlock
+    from app.domain.entities.task import Task, TaskStatus
+    from app.utils import (
+        parse_priority, parse_complexity, parse_energy, parse_time_block,
+        priority_to_display, complexity_to_display, energy_to_display,
+        time_block_to_display, format_duration, downgrade_complexity,
+    )
 
-    # Mapear prioridad
-    priority_map = {
-        "urgente": TaskPriority.URGENT,
-        "urgent": TaskPriority.URGENT,
-        "alta": TaskPriority.HIGH,
-        "high": TaskPriority.HIGH,
-        "normal": TaskPriority.NORMAL,
-        "baja": TaskPriority.LOW,
-        "low": TaskPriority.LOW,
-    }
-    priority = priority_map.get(priority_str.lower(), TaskPriority.NORMAL)
+    # Usar utils centralizados para parsing
+    priority = parse_priority(priority_str)
 
     # Extraer datos enriquecidos del pending_task
     complexity_data = pending.get("complexity", {})
@@ -1173,51 +1250,34 @@ async def handle_task_create_confirm(query, context) -> None:
     due_date = None
     task_context = pending.get("context")
 
-    # Mapear complejidad
+    # Mapear usando utils centralizados
     if complexity_data:
-        complexity_str = complexity_data.get("level", "").lower()
-        complexity_map = {
-            "quick": TaskComplexity.QUICK,
-            "standard": TaskComplexity.STANDARD,
-            "heavy": TaskComplexity.HEAVY,
-            "epic": TaskComplexity.EPIC,
-        }
-        complexity = complexity_map.get(complexity_str)
+        complexity = parse_complexity(complexity_data.get("level", ""))
 
-        # Extraer energía
-        energy_str = complexity_data.get("energy", "").lower()
-        energy_map = {
-            "deep_work": TaskEnergy.DEEP_WORK,
-            "deep work": TaskEnergy.DEEP_WORK,
-            "alta": TaskEnergy.DEEP_WORK,
-            "medium": TaskEnergy.MEDIUM,
-            "media": TaskEnergy.MEDIUM,
-            "low": TaskEnergy.LOW,
-            "baja": TaskEnergy.LOW,
-        }
-        energy = energy_map.get(energy_str)
+        # Extraer energía (puede estar como "energy" o "energy_required")
+        energy_str = complexity_data.get("energy_required") or complexity_data.get("energy") or ""
+        energy = parse_energy(energy_str)
 
         # Extraer tiempo estimado
         est_minutes = complexity_data.get("estimated_minutes")
         if est_minutes:
             estimated_minutes = int(est_minutes)
 
-        # Extraer bloque de tiempo
-        block_str = complexity_data.get("best_time_block", "").lower()
-        block_map = {
-            "morning": TaskTimeBlock.MORNING,
-            "mañana": TaskTimeBlock.MORNING,
-            "afternoon": TaskTimeBlock.AFTERNOON,
-            "tarde": TaskTimeBlock.AFTERNOON,
-            "evening": TaskTimeBlock.EVENING,
-            "noche": TaskTimeBlock.EVENING,
-        }
-        time_block = block_map.get(block_str)
+        # Extraer bloque de tiempo (de complexity o de suggested_time_block)
+        block_str = complexity_data.get("best_time_block") or pending.get("suggested_time_block") or ""
+        time_block = parse_time_block(block_str)
 
         # Extraer notas/reasoning
         reasoning = complexity_data.get("reasoning")
         if reasoning:
             notes = reasoning
+
+    # Extraer campos de dependencias/bloqueo
+    blocked_by_id = pending.get("blocked_by_id")
+    blocked_by_name = pending.get("blocked_by_name")
+
+    # Extraer warning de carga de trabajo (para mostrar al final)
+    workload_warning = pending.get("workload_warning")
 
     # Extraer fechas
     fecha_do = pending.get("fecha_do")
@@ -1272,6 +1332,8 @@ async def handle_task_create_confirm(query, context) -> None:
         source="telegram",
         project_id=project_id,
         project_name=project_name,
+        blocked_by_id=blocked_by_id,
+        blocked_by_name=blocked_by_name,
     )
     created, _ = await service.create(new_task, check_duplicates=False)
 
@@ -1295,15 +1357,7 @@ async def handle_task_create_confirm(query, context) -> None:
             subtask_minutes = max(5, estimated_minutes // len(subtasks))  # Mínimo 5 min por subtarea
 
         # Determinar complejidad de subtareas (una categoría menor que la principal)
-        subtask_complexity = None
-        if complexity:
-            complexity_downgrade = {
-                TaskComplexity.EPIC: TaskComplexity.HEAVY,
-                TaskComplexity.HEAVY: TaskComplexity.STANDARD,
-                TaskComplexity.STANDARD: TaskComplexity.QUICK,
-                TaskComplexity.QUICK: TaskComplexity.QUICK,
-            }
-            subtask_complexity = complexity_downgrade.get(complexity, TaskComplexity.QUICK)
+        subtask_complexity = downgrade_complexity(complexity)
 
         for subtask_title in subtasks:
             if isinstance(subtask_title, str) and subtask_title.strip():
@@ -1375,47 +1429,32 @@ async def handle_task_create_confirm(query, context) -> None:
         f"📊 Estado: 🎯 Hoy",
     ]
 
-    priority_emoji = {
-        TaskPriority.URGENT: "🔥 Urgente",
-        TaskPriority.HIGH: "⚡ Alta",
-        TaskPriority.NORMAL: "🔄 Normal",
-        TaskPriority.LOW: "🧊 Baja",
-    }.get(priority, "🔄 Normal")
-    msg_parts.append(f"⭐ Prioridad: {priority_emoji}")
+    # Usar utils centralizados para display
+    msg_parts.append(f"⭐ Prioridad: {priority_to_display(priority)}")
 
     if complexity:
-        complexity_names = {
-            TaskComplexity.QUICK: "🟢 Quick (<30m)",
-            TaskComplexity.STANDARD: "🟡 Standard (30m-2h)",
-            TaskComplexity.HEAVY: "🔴 Heavy (2-4h)",
-            TaskComplexity.EPIC: "🟣 Epic (4h+)",
-        }
-        msg_parts.append(f"📐 Complejidad: {complexity_names.get(complexity, complexity.value)}")
+        msg_parts.append(f"📐 Complejidad: {complexity_to_display(complexity)}")
 
     if energy:
-        energy_names = {
-            TaskEnergy.DEEP_WORK: "🧠 Deep Work",
-            TaskEnergy.MEDIUM: "💪 Medium",
-            TaskEnergy.LOW: "😴 Low",
-        }
-        msg_parts.append(f"⚡ Energía: {energy_names.get(energy, energy.value)}")
+        msg_parts.append(f"⚡ Energía: {energy_to_display(energy)}")
 
     if time_block:
-        block_names = {
-            TaskTimeBlock.MORNING: "🌅 Morning",
-            TaskTimeBlock.AFTERNOON: "☀️ Afternoon",
-            TaskTimeBlock.EVENING: "🌆 Evening",
-        }
-        msg_parts.append(f"🕐 Bloque: {block_names.get(time_block, time_block.value)}")
+        msg_parts.append(f"🕐 Bloque: {time_block_to_display(time_block)}")
 
     if estimated_minutes:
-        hours = estimated_minutes // 60
-        mins = estimated_minutes % 60
-        time_str = f"{hours}h {mins}m" if hours else f"{mins}m"
-        msg_parts.append(f"⏱️ Tiempo est: {time_str}")
+        msg_parts.append(f"⏱️ Tiempo est: {format_duration(estimated_minutes)}")
 
     if project_name:
         msg_parts.append(f"📁 Proyecto: {project_name}")
+
+    # Mostrar si está bloqueada por otra tarea
+    if blocked_by_name:
+        msg_parts.append(f"🔒 Bloqueada por: {blocked_by_name}")
+
+    # Mostrar warning de carga de trabajo (anti-burnout)
+    if workload_warning:
+        msg_parts.append("")
+        msg_parts.append(workload_warning)
 
     # Mostrar subtareas creadas
     if created_subtasks:

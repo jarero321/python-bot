@@ -515,12 +515,28 @@ async def handle_deepwork_duration(update: Update, context: ContextTypes.DEFAULT
         end_time = user_data["deepwork_end"].strftime("%H:%M")
 
         # Actualizar tarea a "Doing" si hay ID
-        if user_data.get("deepwork_task_id"):
+        task_id = user_data.get("deepwork_task_id")
+        subtasks_text = ""
+
+        if task_id:
             notion = get_notion_service()
             await notion.update_task_estado(
-                user_data["deepwork_task_id"],
+                task_id,
                 TaskEstado.DOING,
             )
+
+            # Obtener subtareas para mostrar expandidas
+            try:
+                subtasks = await notion.get_subtasks(task_id)
+                if subtasks:
+                    subtasks_text = "\n\n📝 <b>Subtareas:</b>\n"
+                    for i, sub in enumerate(subtasks, 1):
+                        title_prop = sub.get("properties", {}).get("Tarea", {}).get("title", [])
+                        sub_name = title_prop[0].get("text", {}).get("content", "?") if title_prop else "?"
+                        subtasks_text += f"  {i}. {sub_name}\n"
+                    user_data["deepwork_subtasks"] = subtasks  # Guardar para tracking
+            except Exception as e:
+                logger.warning(f"Error obteniendo subtareas: {e}")
 
         keyboard = [
             [
@@ -536,7 +552,8 @@ async def handle_deepwork_duration(update: Update, context: ContextTypes.DEFAULT
             f"🧠 <b>DEEP WORK ACTIVO</b>\n\n"
             f"📋 {user_data.get('deepwork_task', 'Tarea')}\n"
             f"⏱️ {minutes} minutos\n"
-            f"🏁 Hasta las {end_time}\n\n"
+            f"🏁 Hasta las {end_time}"
+            f"{subtasks_text}\n\n"
             f"<i>Te avisaré cuando termines.\n"
             f"Evita distracciones 🎯</i>",
             parse_mode="HTML",

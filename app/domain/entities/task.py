@@ -80,6 +80,11 @@ class Task:
     parent_task_id: str | None = None
     subtask_ids: list[str] = field(default_factory=list)
 
+    # Dependencias (bloqueada por otra tarea)
+    blocked_by_id: str | None = None  # ID de la tarea que bloquea esta
+    blocked_by_name: str | None = None  # Nombre para mostrar
+    blocker_reason: str | None = None  # Razón del bloqueo
+
     # Contexto
     context: str | None = None  # PayCash, Freelance, Personal, etc.
     tags: list[str] = field(default_factory=list)
@@ -117,6 +122,11 @@ class Task:
         return self.priority == TaskPriority.URGENT
 
     @property
+    def is_blocked(self) -> bool:
+        """Verifica si la tarea está bloqueada por otra."""
+        return self.blocked_by_id is not None
+
+    @property
     def days_until_due(self) -> int | None:
         """Días hasta el deadline."""
         if not self.due_date:
@@ -142,6 +152,10 @@ class Task:
             "notes": self.notes,
             "estimated_minutes": self.estimated_minutes,
             "is_overdue": self.is_overdue,
+            "is_blocked": self.is_blocked,
+            "blocked_by_id": self.blocked_by_id,
+            "blocked_by_name": self.blocked_by_name,
+            "blocker_reason": self.blocker_reason,
             "days_until_due": self.days_until_due,
         }
 

@@ -80,19 +80,39 @@ class TaskEnricher(BaseEnricher):
             logger.info("TaskEnricher: Ejecutando ComplexityAnalyzer...")
             complexity_result = await self.complexity_analyzer.analyze_task(task_title)
             logger.info(f"TaskEnricher: ComplexityAnalyzer OK - {complexity_result.complexity.value}, {complexity_result.estimated_minutes}min")
+            # Asignar bloque de tiempo basado en energía requerida
+            # Deep Work → Morning (máxima concentración)
+            # Medium → Afternoon (trabajo estándar)
+            # Low → Evening (tareas simples)
+            energy_to_block = {
+                "deep_work": "morning",
+                "medium": "afternoon",
+                "low": "evening",
+            }
+            suggested_block = energy_to_block.get(
+                complexity_result.energy_required.value, "afternoon"
+            )
+
             result.complexity = {
                 "level": complexity_result.complexity.value,
                 "estimated_minutes": complexity_result.estimated_minutes,
                 "energy_required": complexity_result.energy_required.value,
-                "should_divide": complexity_result.should_divide,
+                "should_divide": False,  # Desactivado: subtareas siempre manuales
                 "requires_research": complexity_result.requires_research,
+                "best_time_block": suggested_block,  # Bloque sugerido por energía
             }
             result.estimated_minutes = complexity_result.estimated_minutes
             result.energy_required = complexity_result.energy_required.value
-            result.subtasks = complexity_result.suggested_subtasks or []
+            result.suggested_time_block = suggested_block
+            # Subtareas desactivadas: el usuario las crea manualmente
+            result.subtasks = []
             result.blockers = complexity_result.potential_blockers or []
             result.agents_used.append("ComplexityAnalyzer")
-            logger.info(f"TaskEnricher: Subtareas={len(result.subtasks)}, Blockers={len(result.blockers)}")
+            logger.info(
+                f"TaskEnricher: Bloque sugerido={suggested_block} "
+                f"(energía={complexity_result.energy_required.value}), "
+                f"Blockers={len(result.blockers)}"
+            )
         except Exception as e:
             logger.error(f"TaskEnricher: Error en ComplexityAnalyzer: {e}", exc_info=True)
 
@@ -145,20 +165,37 @@ class TaskEnricher(BaseEnricher):
                 result.suggested_dates["fecha_due"],
             )
 
-        # 7. Detectar proyecto relacionado
+        # 7. Detectar proyecto relacionado (usando contexto detectado)
         try:
-            project_match = await self._find_related_project(message, task_title)
+            project_match = await self._find_related_project(
+                message, task_title, detected_context
+            )
             if project_match:
                 result.project_match = project_match
                 result.agents_used.append("ProjectMatcher")
         except Exception as e:
             self.logger.warning(f"Error detectando proyecto: {e}")
 
+        # 8. Analizar carga de trabajo (anti-burnout)
+        try:
+            workload = await self._analyze_workload(
+                result.suggested_dates.get("fecha_do") if result.suggested_dates else None,
+                result.estimated_minutes or 60,
+            )
+            if workload:
+                result.workload_analysis = workload
+                if workload.get("warning"):
+                    result.workload_warning = workload["warning"]
+                    logger.info(f"TaskEnricher: Advertencia de carga: {workload['warning']}")
+        except Exception as e:
+            self.logger.warning(f"Error analizando carga: {e}")
+
         # Log final del resultado
         logger.info(
             f"TaskEnricher RESULTADO: complexity={result.complexity}, "
             f"subtasks={len(result.subtasks)}, priority={result.suggested_priority}, "
-            f"project={result.project_match.get('name') if result.project_match else None}"
+            f"project={result.project_match.get('name') if result.project_match else None}, "
+            f"workload_warning={result.workload_warning}"
         )
 
         return result
@@ -248,13 +285,18 @@ class TaskEnricher(BaseEnricher):
         self,
         message: str,
         task_title: str,
+        detected_context: "TaskContexto | None" = None,
     ) -> dict[str, Any] | None:
         """
         Detecta si la tarea está relacionada con algún proyecto activo.
 
-        Busca coincidencias entre el mensaje/título y los nombres de proyectos.
+        Usa múltiples estrategias:
+        1. Coincidencia exacta del nombre del proyecto
+        2. Coincidencia de palabras clave
+        3. Filtrado por tipo de proyecto basado en el contexto detectado
         """
         from app.domain.repositories import get_project_repository
+        from app.domain.entities.project import ProjectType
 
         try:
             project_repo = get_project_repository()
@@ -263,39 +305,172 @@ class TaskEnricher(BaseEnricher):
             if not active_projects:
                 return None
 
+            # Mapeo de contexto a tipo de proyecto
+            context_to_project_type = {
+                TaskContexto.PAYCASH: [ProjectType.WORK],
+                TaskContexto.FREELANCE_PA: [ProjectType.FREELANCE],
+                TaskContexto.FREELANCE_GOOGLE: [ProjectType.FREELANCE],
+                TaskContexto.WORKANA: [ProjectType.FREELANCE],
+                TaskContexto.ESTUDIO: [ProjectType.LEARNING],
+                TaskContexto.PERSONAL: [ProjectType.PERSONAL, ProjectType.SIDE_PROJECT, ProjectType.HOBBY],
+            }
+
+            # Filtrar proyectos por tipo si tenemos contexto
+            preferred_types = context_to_project_type.get(detected_context, []) if detected_context else []
+
+            # Separar proyectos: preferidos por contexto vs resto
+            preferred_projects = []
+            other_projects = []
+            for project in active_projects:
+                if project.type in preferred_types:
+                    preferred_projects.append(project)
+                else:
+                    other_projects.append(project)
+
             # Combinar mensaje y título para búsqueda
             search_text = f"{message} {task_title}".lower()
 
-            # Buscar coincidencias con nombres de proyectos
-            for project in active_projects:
-                project_name_lower = project.name.lower()
+            # Función para buscar coincidencias
+            def find_match(projects: list) -> dict | None:
+                for project in projects:
+                    project_name_lower = project.name.lower()
 
-                # Coincidencia exacta del nombre
-                if project_name_lower in search_text:
-                    return {
-                        "id": project.id,
-                        "name": project.name,
-                        "type": project.type.value if project.type else None,
-                    }
+                    # Coincidencia exacta del nombre
+                    if project_name_lower in search_text:
+                        return {
+                            "id": project.id,
+                            "name": project.name,
+                            "type": project.type.value if project.type else None,
+                            "confidence": "high",
+                        }
 
-                # Coincidencia de palabras clave del proyecto
-                project_words = set(project_name_lower.split())
-                search_words = set(search_text.split())
+                    # Coincidencia de palabras clave del proyecto
+                    project_words = set(project_name_lower.split())
+                    search_words = set(search_text.split())
 
-                # Si al menos 2 palabras coinciden (para proyectos con nombres largos)
-                common_words = project_words & search_words
-                # Filtrar palabras comunes muy cortas o genéricas
-                common_words = {w for w in common_words if len(w) > 3}
+                    # Si al menos 2 palabras coinciden (para proyectos con nombres largos)
+                    common_words = project_words & search_words
+                    # Filtrar palabras comunes muy cortas o genéricas
+                    common_words = {w for w in common_words if len(w) > 3}
 
-                if len(common_words) >= 2:
-                    return {
-                        "id": project.id,
-                        "name": project.name,
-                        "type": project.type.value if project.type else None,
-                    }
+                    if len(common_words) >= 2:
+                        return {
+                            "id": project.id,
+                            "name": project.name,
+                            "type": project.type.value if project.type else None,
+                            "confidence": "medium",
+                        }
+                return None
+
+            # Primero buscar en proyectos preferidos por contexto
+            match = find_match(preferred_projects)
+            if match:
+                match["matched_by"] = "context_and_name"
+                logger.info(f"Proyecto encontrado por contexto+nombre: {match['name']}")
+                return match
+
+            # Si no hay coincidencia, buscar en el resto
+            match = find_match(other_projects)
+            if match:
+                match["matched_by"] = "name_only"
+                logger.info(f"Proyecto encontrado solo por nombre: {match['name']}")
+                return match
+
+            # Si hay contexto pero no match, sugerir el primer proyecto del tipo correcto
+            if preferred_projects:
+                first_match = preferred_projects[0]
+                logger.info(f"Proyecto sugerido por contexto: {first_match.name}")
+                return {
+                    "id": first_match.id,
+                    "name": first_match.name,
+                    "type": first_match.type.value if first_match.type else None,
+                    "confidence": "low",
+                    "matched_by": "context_only",
+                }
 
             return None
 
         except Exception as e:
             logger.warning(f"Error buscando proyecto relacionado: {e}")
+            return None
+
+    async def _analyze_workload(
+        self,
+        target_date: str | None,
+        new_task_minutes: int,
+    ) -> dict[str, Any] | None:
+        """
+        Analiza la carga de trabajo para evitar sobrecarga (anti-burnout).
+
+        Límites:
+        - Máximo 8 horas de trabajo por día (480 min)
+        - Máximo 5 tareas de alta prioridad por día
+        - Advertencia si ya hay 3+ tareas EPIC/HEAVY
+
+        Returns:
+            dict con análisis y posible warning, o None si no hay problema
+        """
+        from datetime import date, datetime
+        from app.domain.repositories import get_task_repository
+
+        try:
+            # Si no hay fecha, usar hoy
+            if target_date:
+                check_date = datetime.strptime(target_date, "%Y-%m-%d").date()
+            else:
+                check_date = date.today()
+
+            task_repo = get_task_repository()
+
+            # Obtener tareas del día
+            tasks_for_day = await task_repo.get_by_scheduled_date(check_date)
+
+            if not tasks_for_day:
+                return {
+                    "date": check_date.isoformat(),
+                    "current_tasks": 0,
+                    "current_minutes": 0,
+                    "available_minutes": 480,
+                    "warning": None,
+                }
+
+            # Calcular carga actual
+            current_minutes = sum(t.estimated_minutes or 60 for t in tasks_for_day)
+            high_priority_count = sum(
+                1 for t in tasks_for_day
+                if t.priority and t.priority.value in ["🔥 Urgente", "⚡ Alta"]
+            )
+            heavy_tasks = sum(
+                1 for t in tasks_for_day
+                if t.complexity and t.complexity.value in ["🔴 Heavy (2-4h)", "⚫ Epic (4h+)"]
+            )
+
+            # Calcular con la nueva tarea
+            total_minutes = current_minutes + new_task_minutes
+
+            # Generar warnings
+            warning = None
+            if total_minutes > 480:
+                hours_over = (total_minutes - 480) / 60
+                warning = f"⚠️ Sobrecarga: {hours_over:.1f}h más de lo recomendado para este día"
+            elif total_minutes > 420:
+                warning = "⚡ Día muy cargado: considera mover algo a mañana"
+            elif high_priority_count >= 5:
+                warning = "🔥 Demasiadas tareas urgentes/altas para un día"
+            elif heavy_tasks >= 3:
+                warning = "🏋️ Muchas tareas pesadas: riesgo de burnout"
+
+            return {
+                "date": check_date.isoformat(),
+                "current_tasks": len(tasks_for_day),
+                "current_minutes": current_minutes,
+                "total_with_new": total_minutes,
+                "available_minutes": max(0, 480 - total_minutes),
+                "high_priority_count": high_priority_count,
+                "heavy_tasks": heavy_tasks,
+                "warning": warning,
+            }
+
+        except Exception as e:
+            logger.warning(f"Error analizando carga de trabajo: {e}")
             return None
