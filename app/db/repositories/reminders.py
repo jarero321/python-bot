@@ -70,7 +70,8 @@ class RemindersRepository:
     async def get_due_reminders(self, now: datetime | None = None) -> list[ScheduledReminder]:
         """Obtiene recordatorios que deben enviarse ahora."""
         if now is None:
-            now = datetime.utcnow()
+            # Usar hora local (consistente con cómo se crean los recordatorios)
+            now = datetime.now()
 
         result = await self.session.execute(
             select(ScheduledReminder).where(
@@ -89,7 +90,7 @@ class RemindersRepository:
         """Marca un recordatorio como enviado e incrementa el contador."""
         reminder = await self.get_by_id(reminder_id)
         if reminder:
-            reminder.last_reminded_at = datetime.utcnow()
+            reminder.last_reminded_at = datetime.now()
             reminder.escalation_count += 1
             await self.session.flush()
             logger.debug(f"Recordatorio {reminder_id} marcado como enviado (count={reminder.escalation_count})")
@@ -101,7 +102,7 @@ class RemindersRepository:
         """Pospone un recordatorio."""
         reminder = await self.get_by_id(reminder_id)
         if reminder:
-            reminder.snooze_until = datetime.utcnow() + timedelta(minutes=minutes)
+            reminder.snooze_until = datetime.now() + timedelta(minutes=minutes)
             reminder.status = ReminderStatus.SNOOZED
             await self.session.flush()
             logger.info(f"Recordatorio {reminder_id} pospuesto {minutes} minutos")
@@ -112,7 +113,7 @@ class RemindersRepository:
         reminder = await self.get_by_id(reminder_id)
         if reminder:
             reminder.status = ReminderStatus.ACKNOWLEDGED
-            reminder.updated_at = datetime.utcnow()
+            reminder.updated_at = datetime.now()
             await self.session.flush()
             logger.info(f"Recordatorio {reminder_id} reconocido")
         return reminder
@@ -122,7 +123,7 @@ class RemindersRepository:
         reminder = await self.get_by_id(reminder_id)
         if reminder:
             reminder.status = ReminderStatus.COMPLETED
-            reminder.updated_at = datetime.utcnow()
+            reminder.updated_at = datetime.now()
             await self.session.flush()
             logger.info(f"Recordatorio {reminder_id} completado")
         return reminder
@@ -132,7 +133,7 @@ class RemindersRepository:
         reminder = await self.get_by_id(reminder_id)
         if reminder:
             reminder.status = ReminderStatus.CANCELLED
-            reminder.updated_at = datetime.utcnow()
+            reminder.updated_at = datetime.now()
             await self.session.flush()
             logger.info(f"Recordatorio {reminder_id} cancelado")
         return reminder

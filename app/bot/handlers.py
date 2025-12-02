@@ -745,6 +745,49 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         elif action == "show_today_for_reschedule":
             await handle_show_pending_tasks(query, context)
 
+        # ==================== MORNING/PLANNING CALLBACKS ====================
+        elif action == "morning_ack":
+            await query.edit_message_text(
+                "💪 <b>¡A trabajar!</b>\n\n"
+                "Tienes tu plan listo. ¡Éxito hoy!",
+                parse_mode="HTML",
+            )
+
+        elif action == "planning_adjust_today":
+            await query.edit_message_text(
+                "🔄 <b>Ajustar plan de hoy</b>\n\n"
+                "Dime qué quieres cambiar del plan.\n"
+                "Puedes:\n"
+                "• Agregar tareas\n"
+                "• Mover tareas a otro día\n"
+                "• Cambiar prioridades",
+                parse_mode="HTML",
+            )
+
+        elif action == "planning_suggest_today":
+            await handle_suggest_tasks_today(query, context)
+
+        elif action == "planning_tomorrow":
+            await query.edit_message_text(
+                "📋 <b>Planificando mañana...</b>\n\n"
+                "Escribe las tareas que quieres hacer mañana o dime "
+                "\"sugiere tareas\" para que te ayude.",
+                parse_mode="HTML",
+            )
+
+        elif action == "planning_week":
+            await query.edit_message_text(
+                "📊 <b>Vista semanal</b>\n\n"
+                "Escribe \"mi semana\" para ver tu carga de trabajo.",
+                parse_mode="HTML",
+            )
+
+        elif action == "planning_skip":
+            await query.edit_message_text(
+                "⏭️ Planificación saltada. ¡Descansa bien!",
+                parse_mode="HTML",
+            )
+
         # Default
         else:
             logger.warning(f"Callback no manejado: {data}")
@@ -2646,6 +2689,57 @@ async def handle_reschedule_task(query, context, task_id: str | None) -> None:
         parse_mode="HTML",
         reply_markup=keyboard,
     )
+
+
+async def handle_suggest_tasks_today(query, context) -> None:
+    """Sugiere tareas para hoy desde el backlog."""
+    from app.domain.services import get_task_service
+    from app.domain.entities.task import TaskStatus
+
+    try:
+        await query.edit_message_text("🔍 <b>Buscando tareas sugeridas...</b>", parse_mode="HTML")
+
+        service = get_task_service()
+
+        # Obtener tareas del backlog con alta prioridad
+        backlog_tasks = await service.get_tasks_by_status(TaskStatus.TODO)
+
+        if not backlog_tasks:
+            await query.edit_message_text(
+                "📋 <b>Sin sugerencias</b>\n\n"
+                "No hay tareas pendientes en el backlog.\n"
+                "Escribe una nueva tarea para agregarla.",
+                parse_mode="HTML",
+            )
+            return
+
+        # Ordenar por prioridad y tomar las top 5
+        priority_order = {"Urgente": 0, "Alta": 1, "Normal": 2, "Baja": 3}
+        sorted_tasks = sorted(
+            backlog_tasks,
+            key=lambda t: priority_order.get(t.priority or "Normal", 2)
+        )[:5]
+
+        # Formatear mensaje
+        task_lines = []
+        for i, task in enumerate(sorted_tasks, 1):
+            prio_emoji = {"Urgente": "🔴", "Alta": "🟠", "Normal": "🔵", "Baja": "⚪"}.get(task.priority, "🔵")
+            task_lines.append(f"{i}. {prio_emoji} {task.title[:40]}")
+
+        message = (
+            "💡 <b>Tareas sugeridas para hoy:</b>\n\n"
+            + "\n".join(task_lines)
+            + "\n\n<i>Dime cuáles quieres agregar a tu día.</i>"
+        )
+
+        await query.edit_message_text(message, parse_mode="HTML")
+
+    except Exception as e:
+        logger.error(f"Error sugiriendo tareas: {e}")
+        await query.edit_message_text(
+            "❌ Error obteniendo sugerencias. Intenta de nuevo.",
+            parse_mode="HTML",
+        )
 
 
 # ==================== APPLICATION SETUP ====================
