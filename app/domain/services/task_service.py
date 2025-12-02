@@ -163,6 +163,38 @@ class TaskService:
         """Obtiene una tarea por su ID."""
         return await self._repo.get_by_id(task_id)
 
+    async def resolve_task_id(self, partial_id: str) -> str | None:
+        """
+        Resuelve un ID parcial (truncado) al ID completo.
+
+        Los callbacks de Telegram usan IDs truncados a 8 caracteres.
+        Esta función busca en las tareas recientes para encontrar el ID completo.
+
+        Args:
+            partial_id: ID parcial (ej: primeros 8 caracteres)
+
+        Returns:
+            ID completo si se encuentra, None si no
+        """
+        # Si ya es un ID completo (32+ caracteres), retornarlo
+        if len(partial_id) >= 32:
+            return partial_id
+
+        # Buscar en tareas de hoy primero (más probable)
+        tasks = await self._repo.get_for_today()
+        for task in tasks:
+            if task.id.startswith(partial_id) or partial_id in task.id:
+                return task.id
+
+        # Si no está en hoy, buscar en pendientes
+        pending = await self._repo.get_pending(limit=100)
+        for task in pending:
+            if task.id.startswith(partial_id) or partial_id in task.id:
+                return task.id
+
+        logger.warning(f"No se pudo resolver ID parcial: {partial_id}")
+        return None
+
     # ==================== Búsqueda ====================
 
     async def smart_search(

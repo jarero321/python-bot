@@ -580,6 +580,17 @@ class TaskUpdateHandler(BaseIntentHandler):
         )
 
 
+def _truncate_task_title(title: str, max_length: int = 35) -> str:
+    """Trunca título de tarea, permitiendo 2 líneas si es necesario."""
+    if len(title) <= max_length:
+        return title
+    # Buscar un espacio para cortar de forma natural
+    cut_point = title[:max_length].rfind(' ')
+    if cut_point == -1 or cut_point < max_length // 2:
+        cut_point = max_length
+    return title[:cut_point] + "..."
+
+
 @intent_handler(UserIntent.TASK_DELETE)
 class TaskDeleteHandler(BaseIntentHandler):
     """Handler para eliminar/completar tareas con búsqueda semántica."""
@@ -607,32 +618,52 @@ class TaskDeleteHandler(BaseIntentHandler):
         matching_tasks = search_result.tasks
 
         if matching_tasks:
+            # Inicializar selección vacía
+            context.user_data["multi_select_tasks"] = {}
+            context.user_data["multi_select_available"] = [
+                {"id": t.id, "title": t.title} for t in matching_tasks[:8]
+            ]
+
+            # Construir keyboard con checkboxes (todos deseleccionados inicialmente)
             keyboard = []
-            for task in matching_tasks[:5]:
+            for task in matching_tasks[:8]:
+                # Mostrar título en 2 líneas si es largo
+                display_title = _truncate_task_title(task.title, 35)
                 keyboard.append([
                     InlineKeyboardButton(
-                        f"✅ {task.title[:30]}",
-                        callback_data=f"task_complete:{task.id}",
+                        f"☐ {display_title}",
+                        callback_data=f"task_toggle:{task.id[:8]}",
                     ),
                 ])
+
+            # Botones de acción
             keyboard.append([
+                InlineKeyboardButton(
+                    "✅ Completar seleccionadas",
+                    callback_data="task_complete_selected",
+                ),
+            ])
+            keyboard.append([
+                InlineKeyboardButton(
+                    "☑️ Seleccionar todas",
+                    callback_data="task_select_all",
+                ),
                 InlineKeyboardButton(
                     "❌ Cancelar",
                     callback_data="task_delete_cancel",
                 ),
             ])
 
-            # Guardar en contexto
+            # Guardar en contexto para compatibilidad
             context.user_data["pending_complete_tasks"] = [
                 {"id": t.id, "title": t.title} for t in matching_tasks
             ]
 
             return HandlerResponse(
                 message=(
-                    f"📋 <b>Completar/Eliminar tarea</b>\n\n"
-                    f"Encontré estas tareas que coinciden con "
-                    f"\"{task_name[:30]}\":\n\n"
-                    f"Selecciona la que quieres marcar como completada:"
+                    f"📋 <b>Completar tareas</b>\n\n"
+                    f"Selecciona las tareas que quieres completar:\n"
+                    f"<i>(Toca para marcar/desmarcar)</i>"
                 ),
                 keyboard=InlineKeyboardMarkup(keyboard),
             )

@@ -473,7 +473,23 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await handle_task_view(query, context, task_id)
 
         elif action in ("task_cancel", "task_action_cancel", "task_delete_cancel"):
+            context.user_data.pop("multi_select_tasks", None)
+            context.user_data.pop("multi_select_available", None)
             await query.edit_message_text("❌ Operación cancelada.")
+
+        # Multi-select task callbacks
+        elif action == "task_toggle":
+            task_id = parts[1] if len(parts) > 1 else None
+            await handle_task_toggle(query, context, task_id)
+
+        elif action == "task_select_all":
+            await handle_task_select_all(query, context)
+
+        elif action == "task_deselect_all":
+            await handle_task_deselect_all(query, context)
+
+        elif action == "task_complete_selected":
+            await handle_task_complete_selected(query, context)
 
         # Project callbacks
         elif action == "project_create_confirm":
@@ -744,7 +760,14 @@ async def handle_task_doing_callback(query, context, task_id: str | None) -> Non
     from app.domain.entities.task import TaskStatus
 
     service = get_task_service()
-    updated = await service.update_status(task_id, TaskStatus.DOING)
+
+    # Resolver ID parcial a ID completo
+    full_task_id = await service.resolve_task_id(task_id)
+    if not full_task_id:
+        await query.edit_message_text("❌ No se encontró la tarea.")
+        return
+
+    updated = await service.update_status(full_task_id, TaskStatus.DOING)
 
     if updated:
         await query.edit_message_text(
@@ -763,7 +786,7 @@ async def handle_task_status_callback(query, context, task_id: str | None, statu
         return
 
     # Feedback visual inmediato
-    status_names = {"doing": "En progreso", "done": "Completada", "paused": "Pausada", "today": "Para hoy"}
+    status_names = {"doing": "En progreso", "done": "Completada", "paused": "Pausada", "today": "Para hoy", "backlog": "Backlog"}
     try:
         await query.edit_message_text(f"⏳ <b>Actualizando a {status_names.get(status, status)}...</b>", parse_mode="HTML")
     except Exception:
@@ -777,6 +800,7 @@ async def handle_task_status_callback(query, context, task_id: str | None, statu
         "done": TaskStatus.DONE,
         "paused": TaskStatus.PAUSED,
         "today": TaskStatus.TODAY,
+        "backlog": TaskStatus.BACKLOG,
     }
 
     target_status = status_map.get(status)
@@ -785,7 +809,14 @@ async def handle_task_status_callback(query, context, task_id: str | None, statu
         return
 
     service = get_task_service()
-    updated = await service.update_status(task_id, target_status)
+
+    # Resolver ID parcial a ID completo
+    full_task_id = await service.resolve_task_id(task_id)
+    if not full_task_id:
+        await query.edit_message_text("❌ No se encontró la tarea.")
+        return
+
+    updated = await service.update_status(full_task_id, target_status)
 
     if updated:
         status_names = {
@@ -819,7 +850,14 @@ async def handle_task_complete_callback(query, context, task_id: str | None) -> 
     from app.domain.services import get_task_service
 
     service = get_task_service()
-    completed = await service.complete(task_id)
+
+    # Resolver ID parcial a ID completo
+    full_task_id = await service.resolve_task_id(task_id)
+    if not full_task_id:
+        await query.edit_message_text("❌ No se encontró la tarea. Puede que ya haya sido completada.")
+        return
+
+    completed = await service.complete(full_task_id)
 
     if completed:
         await query.edit_message_text(
@@ -830,6 +868,204 @@ async def handle_task_complete_callback(query, context, task_id: str | None) -> 
         )
     else:
         await query.edit_message_text("❌ No se pudo completar la tarea.")
+
+
+# ==================== MULTI-SELECT TASK CALLBACKS ====================
+
+
+def _truncate_title(title: str, max_length: int = 35) -> str:
+    """Trunca título de tarea para mostrar en botones."""
+    if len(title) <= max_length:
+        return title
+    cut_point = title[:max_length].rfind(' ')
+    if cut_point == -1 or cut_point < max_length // 2:
+        cut_point = max_length
+    return title[:cut_point] + "..."
+
+
+def _build_multiselect_keyboard(available_tasks: list, selected_ids: dict) -> InlineKeyboardMarkup:
+    """Construye el keyboard con checkboxes para selección múltiple."""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    keyboard = []
+    for task in available_tasks:
+        task_id = task["id"]
+        task_id_short = task_id[:8]
+        is_selected = selected_ids.get(task_id_short, False)
+        checkbox = "☑️" if is_selected else "☐"
+        display_title = _truncate_title(task["title"], 32)
+
+        keyboard.append([
+            InlineKeyboardButton(
+                f"{checkbox} {display_title}",
+                callback_data=f"task_toggle:{task_id_short}",
+            ),
+        ])
+
+    # Contar seleccionadas
+    selected_count = sum(1 for v in selected_ids.values() if v)
+
+    # Botones de acción
+    keyboard.append([
+        InlineKeyboardButton(
+            f"✅ Completar ({selected_count})" if selected_count > 0 else "✅ Completar seleccionadas",
+            callback_data="task_complete_selected",
+        ),
+    ])
+
+    # Botón de seleccionar/deseleccionar todas
+    if selected_count == len(available_tasks):
+        select_btn = InlineKeyboardButton("☐ Deseleccionar todas", callback_data="task_deselect_all")
+    else:
+        select_btn = InlineKeyboardButton("☑️ Seleccionar todas", callback_data="task_select_all")
+
+    keyboard.append([
+        select_btn,
+        InlineKeyboardButton("❌ Cancelar", callback_data="task_delete_cancel"),
+    ])
+
+    return InlineKeyboardMarkup(keyboard)
+
+
+async def handle_task_toggle(query, context, task_id_short: str | None) -> None:
+    """Toggle de selección de una tarea."""
+    if not task_id_short:
+        await query.answer("❌ ID no válido")
+        return
+
+    # Obtener estado actual
+    selected = context.user_data.get("multi_select_tasks", {})
+    available = context.user_data.get("multi_select_available", [])
+
+    if not available:
+        await query.answer("❌ No hay tareas disponibles")
+        return
+
+    # Toggle
+    current_state = selected.get(task_id_short, False)
+    selected[task_id_short] = not current_state
+    context.user_data["multi_select_tasks"] = selected
+
+    # Feedback rápido
+    await query.answer("✓ Seleccionada" if selected[task_id_short] else "○ Deseleccionada")
+
+    # Reconstruir keyboard
+    keyboard = _build_multiselect_keyboard(available, selected)
+
+    selected_count = sum(1 for v in selected.values() if v)
+    await query.edit_message_text(
+        f"📋 <b>Completar tareas</b>\n\n"
+        f"Selecciona las tareas que quieres completar:\n"
+        f"<i>({selected_count} seleccionadas)</i>",
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
+async def handle_task_select_all(query, context) -> None:
+    """Selecciona todas las tareas."""
+    available = context.user_data.get("multi_select_available", [])
+    if not available:
+        await query.answer("❌ No hay tareas disponibles")
+        return
+
+    # Seleccionar todas
+    selected = {task["id"][:8]: True for task in available}
+    context.user_data["multi_select_tasks"] = selected
+
+    await query.answer(f"✓ {len(available)} tareas seleccionadas")
+
+    keyboard = _build_multiselect_keyboard(available, selected)
+    await query.edit_message_text(
+        f"📋 <b>Completar tareas</b>\n\n"
+        f"Selecciona las tareas que quieres completar:\n"
+        f"<i>({len(available)} seleccionadas)</i>",
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
+async def handle_task_deselect_all(query, context) -> None:
+    """Deselecciona todas las tareas."""
+    available = context.user_data.get("multi_select_available", [])
+
+    # Deseleccionar todas
+    context.user_data["multi_select_tasks"] = {}
+
+    await query.answer("○ Todas deseleccionadas")
+
+    keyboard = _build_multiselect_keyboard(available, {})
+    await query.edit_message_text(
+        f"📋 <b>Completar tareas</b>\n\n"
+        f"Selecciona las tareas que quieres completar:\n"
+        f"<i>(0 seleccionadas)</i>",
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
+async def handle_task_complete_selected(query, context) -> None:
+    """Completa todas las tareas seleccionadas."""
+    from app.domain.services import get_task_service
+
+    selected = context.user_data.get("multi_select_tasks", {})
+    available = context.user_data.get("multi_select_available", [])
+
+    # Obtener IDs seleccionados
+    selected_tasks = [
+        task for task in available
+        if selected.get(task["id"][:8], False)
+    ]
+
+    if not selected_tasks:
+        await query.answer("⚠️ No hay tareas seleccionadas")
+        return
+
+    # Feedback visual
+    await query.edit_message_text(
+        f"⏳ <b>Completando {len(selected_tasks)} tareas...</b>",
+        parse_mode="HTML",
+    )
+
+    service = get_task_service()
+    completed_titles = []
+    failed = 0
+
+    for task in selected_tasks:
+        try:
+            # Resolver ID completo
+            full_id = await service.resolve_task_id(task["id"][:8])
+            if full_id:
+                result = await service.complete(full_id)
+                if result:
+                    completed_titles.append(result.title)
+                else:
+                    failed += 1
+            else:
+                failed += 1
+        except Exception as e:
+            logger.warning(f"Error completando tarea {task['id']}: {e}")
+            failed += 1
+
+    # Limpiar contexto
+    context.user_data.pop("multi_select_tasks", None)
+    context.user_data.pop("multi_select_available", None)
+    context.user_data.pop("pending_complete_tasks", None)
+
+    # Mensaje de resultado
+    if completed_titles:
+        titles_display = "\n".join([f"  ✓ {t[:40]}" for t in completed_titles[:10]])
+        if len(completed_titles) > 10:
+            titles_display += f"\n  ... y {len(completed_titles) - 10} más"
+
+        msg = f"✅ <b>{len(completed_titles)} tareas completadas</b>\n\n{titles_display}"
+        if failed > 0:
+            msg += f"\n\n⚠️ {failed} no se pudieron completar"
+        msg += "\n\n🎉 ¡Buen trabajo!"
+
+        await query.edit_message_text(msg, parse_mode="HTML")
+    else:
+        await query.edit_message_text("❌ No se pudo completar ninguna tarea.")
 
 
 async def handle_task_create_confirm(query, context) -> None:
@@ -2161,7 +2397,14 @@ async def handle_task_pause(query, context, task_id: str | None) -> None:
     from app.domain.entities.task import TaskStatus
 
     service = get_task_service()
-    updated = await service.update_status(task_id, TaskStatus.PAUSED)
+
+    # Resolver ID parcial a ID completo
+    full_task_id = await service.resolve_task_id(task_id)
+    if not full_task_id:
+        await query.edit_message_text("❌ No se encontró la tarea.")
+        return
+
+    updated = await service.update_status(full_task_id, TaskStatus.PAUSED)
 
     if updated:
         await query.edit_message_text(
