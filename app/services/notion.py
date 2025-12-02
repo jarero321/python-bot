@@ -420,6 +420,29 @@ class NotionService:
             log_error(e, "get_tasks_for_today", ErrorCategory.API_NOTION)
             return []
 
+    async def get_completed_today(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Obtiene tareas completadas hoy (Fecha Done = hoy)."""
+        from datetime import datetime
+
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        try:
+            response = await self.client.databases.query(
+                database_id=NotionDatabase.TASKS,
+                filter={
+                    "and": [
+                        {"property": "Estado", "select": {"equals": TaskEstado.DONE.value}},
+                        {"property": "Fecha Done", "date": {"equals": today}},
+                    ]
+                },
+                page_size=limit,
+                sorts=[{"property": "Fecha Done", "direction": "descending"}],
+            )
+            return response.get("results", [])
+        except APIResponseError as e:
+            logger.error(f"Error obteniendo tareas completadas hoy: {e}")
+            return []
+
     async def get_pending_tasks(
         self,
         contexto: TaskContexto | None = None,

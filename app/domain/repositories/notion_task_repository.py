@@ -405,6 +405,11 @@ class NotionTaskRepository(ITaskRepository):
         pending = await self.get_pending(limit=100)
         return [t for t in pending if t.is_overdue]
 
+    async def get_completed_today(self) -> list[Task]:
+        """Obtiene tareas completadas hoy."""
+        tasks = await self._notion.get_completed_today()
+        return [self._notion_to_task(t) for t in tasks]
+
     async def get_by_project(self, project_id: str) -> list[Task]:
         """Obtiene tareas de un proyecto."""
         pending = await self.get_pending(limit=100)

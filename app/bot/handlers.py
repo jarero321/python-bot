@@ -406,11 +406,15 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         "task_complete", "task_status", "project_create_confirm",
         "task_select_project", "task_select_project_created",
     ]
+    # Callbacks que manejan su propio answer (no llamar answer() aquí)
+    self_answer_actions = [
+        "task_toggle", "task_select_all", "task_deselect_all",
+    ]
     action_prefix = data.split(":")[0]
 
     if action_prefix in slow_actions:
         await query.answer("⏳ Procesando...")
-    else:
+    elif action_prefix not in self_answer_actions:
         await query.answer()
 
     # Parsear callback data
@@ -887,11 +891,14 @@ def _build_multiselect_keyboard(available_tasks: list, selected_ids: dict) -> In
     """Construye el keyboard con checkboxes para selección múltiple."""
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+    logger.info(f"[KEYBOARD] _build_multiselect_keyboard - selected_ids: {selected_ids}")
+
     keyboard = []
     for task in available_tasks:
         task_id = task["id"]
         task_id_short = task_id[:8]
         is_selected = selected_ids.get(task_id_short, False)
+        logger.info(f"[KEYBOARD] Task {task_id_short}: is_selected={is_selected}")
         checkbox = "☑️" if is_selected else "☐"
         display_title = _truncate_title(task["title"], 32)
 
@@ -929,6 +936,8 @@ def _build_multiselect_keyboard(available_tasks: list, selected_ids: dict) -> In
 
 async def handle_task_toggle(query, context, task_id_short: str | None) -> None:
     """Toggle de selección de una tarea."""
+    logger.info(f"[TOGGLE] handle_task_toggle called with task_id_short: {task_id_short}")
+
     if not task_id_short:
         await query.answer("❌ ID no válido")
         return
@@ -937,14 +946,27 @@ async def handle_task_toggle(query, context, task_id_short: str | None) -> None:
     selected = context.user_data.get("multi_select_tasks", {})
     available = context.user_data.get("multi_select_available", [])
 
+    logger.info(f"[TOGGLE] Before toggle - selected: {selected}, available count: {len(available)}")
+
     if not available:
         await query.answer("❌ No hay tareas disponibles")
         return
 
-    # Toggle
+    # Verificar que el task_id_short corresponde a una tarea disponible
+    valid_ids = [task["id"][:8] for task in available]
+    logger.info(f"[TOGGLE] Valid IDs: {valid_ids}, Looking for: {task_id_short}")
+
+    if task_id_short not in valid_ids:
+        logger.warning(f"task_id_short {task_id_short} not found in available tasks")
+        await query.answer("❌ Tarea no encontrada")
+        return
+
+    # Toggle solo la tarea específica
     current_state = selected.get(task_id_short, False)
     selected[task_id_short] = not current_state
     context.user_data["multi_select_tasks"] = selected
+
+    logger.info(f"[TOGGLE] After toggle - selected: {selected}")
 
     # Feedback rápido
     await query.answer("✓ Seleccionada" if selected[task_id_short] else "○ Deseleccionada")

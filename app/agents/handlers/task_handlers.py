@@ -434,8 +434,9 @@ class TaskQueryHandler(BaseIntentHandler):
 
         # Sin query, mostrar tareas de hoy
         tasks = await self._service.get_for_today()
+        completed_today = await self._service.get_completed_today()
 
-        if not tasks:
+        if not tasks and not completed_today:
             return HandlerResponse(
                 message=(
                     "📋 <b>Tareas de hoy</b>\n\n"
@@ -447,8 +448,8 @@ class TaskQueryHandler(BaseIntentHandler):
         # Formatear tareas usando entidades del dominio
         lines = ["📋 <b>Tareas de hoy</b>\n"]
 
-        # Agrupar tareas padre con subtareas
-        grouped = group_tasks_with_subtasks(tasks)
+        # Agrupar tareas padre con subtareas (si hay tareas pendientes)
+        grouped = group_tasks_with_subtasks(tasks) if tasks else []
 
         # Separar por estado (solo tareas padre/independientes para la agrupación)
         def format_grouped_tasks(task_list: list[tuple[Task, list[Task]]]) -> list[str]:
@@ -477,13 +478,25 @@ class TaskQueryHandler(BaseIntentHandler):
             lines.append("\n<b>⏸️ Pausadas:</b>")
             lines.extend(format_grouped_tasks(paused_grouped))
 
-        # Resumen
-        total = len(tasks)
-        done_count = len([t for t in tasks if t.status == TaskStatus.DONE])
+        # Mostrar tareas completadas hoy
+        if completed_today:
+            lines.append("\n<b>✅ Completadas hoy:</b>")
+            for task in completed_today[:5]:  # Mostrar máximo 5
+                lines.append(f"  ✓ <s>{task.title}</s>")
+            if len(completed_today) > 5:
+                lines.append(f"  <i>... y {len(completed_today) - 5} más</i>")
+
+        # Resumen con historial de completadas
+        pending_count = len(tasks)
+        completed_count = len(completed_today)
+        total_today = pending_count + completed_count
+
         parent_count = len([t for t, _ in grouped if not t.parent_task_id])
         subtask_count = sum(len(subs) for _, subs in grouped)
 
-        lines.append(f"\n📊 {done_count}/{total} completadas")
+        lines.append(f"\n📊 <b>{completed_count}/{total_today}</b> completadas hoy")
+        if pending_count > 0:
+            lines.append(f"🎯 {pending_count} pendientes")
         if subtask_count > 0:
             lines.append(f"<i>({parent_count} tareas principales, {subtask_count} subtareas)</i>")
 

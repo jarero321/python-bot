@@ -98,6 +98,11 @@ class ITaskRepository(IRepository[Task]):
         pass
 
     @abstractmethod
+    async def get_completed_today(self) -> list[Task]:
+        """Obtiene tareas completadas hoy."""
+        pass
+
+    @abstractmethod
     async def get_by_project(self, project_id: str) -> list[Task]:
         """Obtiene tareas de un proyecto."""
         pass

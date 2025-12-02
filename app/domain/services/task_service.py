@@ -385,6 +385,10 @@ class TaskService:
         """Obtiene tareas vencidas."""
         return await self._repo.get_overdue()
 
+    async def get_completed_today(self) -> list[Task]:
+        """Obtiene tareas completadas hoy."""
+        return await self._repo.get_completed_today()
+
     async def get_by_status(self, status: TaskStatus) -> list[Task]:
         """Obtiene tareas por estado."""
         return await self._repo.get_by_status(status)
