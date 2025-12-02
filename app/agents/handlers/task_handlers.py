@@ -626,9 +626,31 @@ class TaskDeleteHandler(BaseIntentHandler):
 
         task_name = entities.get("task", text)
 
-        # Usar búsqueda semántica para encontrar tareas
-        search_result = await self._service.smart_search(task_name, limit=10)
-        matching_tasks = search_result.tasks
+        # Si es una búsqueda genérica ("algunas tareas", "tareas", etc.), mostrar tareas de hoy
+        generic_terms = ["algunas tareas", "tareas", "algunas", "varias", "mis tareas"]
+        is_generic = any(term in task_name.lower() for term in generic_terms)
+
+        if is_generic:
+            # Obtener tareas pendientes de hoy
+            all_tasks = await self._service.get_for_today()
+            # Filtrar solo las pendientes (no completadas)
+            matching_tasks = [
+                t for t in all_tasks
+                if t.status not in (TaskStatus.DONE, TaskStatus.CANCELLED)
+            ]
+        else:
+            # Usar búsqueda semántica para encontrar tareas específicas
+            search_result = await self._service.smart_search(task_name, limit=10)
+            matching_tasks = search_result.tasks
+
+        # Eliminar duplicados por ID
+        seen_ids = set()
+        unique_tasks = []
+        for task in matching_tasks:
+            if task.id not in seen_ids:
+                seen_ids.add(task.id)
+                unique_tasks.append(task)
+        matching_tasks = unique_tasks
 
         if matching_tasks:
             # Inicializar selección vacía
