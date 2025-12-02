@@ -896,7 +896,8 @@ def _build_multiselect_keyboard(available_tasks: list, selected_ids: dict) -> In
     keyboard = []
     for task in available_tasks:
         task_id = task["id"]
-        task_id_short = task_id[:8]
+        # Usar últimos 8 caracteres porque los IDs de Notion comparten el mismo prefijo
+        task_id_short = task_id[-8:]
         is_selected = selected_ids.get(task_id_short, False)
         logger.info(f"[KEYBOARD] Task {task_id_short}: is_selected={is_selected}")
         checkbox = "☑️" if is_selected else "☐"
@@ -953,7 +954,7 @@ async def handle_task_toggle(query, context, task_id_short: str | None) -> None:
         return
 
     # Verificar que el task_id_short corresponde a una tarea disponible
-    valid_ids = [task["id"][:8] for task in available]
+    valid_ids = [task["id"][-8:] for task in available]
     logger.info(f"[TOGGLE] Valid IDs: {valid_ids}, Looking for: {task_id_short}")
 
     if task_id_short not in valid_ids:
@@ -991,8 +992,8 @@ async def handle_task_select_all(query, context) -> None:
         await query.answer("❌ No hay tareas disponibles")
         return
 
-    # Seleccionar todas
-    selected = {task["id"][:8]: True for task in available}
+    # Seleccionar todas (usar últimos 8 caracteres)
+    selected = {task["id"][-8:]: True for task in available}
     context.user_data["multi_select_tasks"] = selected
 
     await query.answer(f"✓ {len(available)} tareas seleccionadas")
@@ -1033,10 +1034,10 @@ async def handle_task_complete_selected(query, context) -> None:
     selected = context.user_data.get("multi_select_tasks", {})
     available = context.user_data.get("multi_select_available", [])
 
-    # Obtener IDs seleccionados
+    # Obtener IDs seleccionados (usar últimos 8 caracteres)
     selected_tasks = [
         task for task in available
-        if selected.get(task["id"][:8], False)
+        if selected.get(task["id"][-8:], False)
     ]
 
     if not selected_tasks:
@@ -1055,8 +1056,8 @@ async def handle_task_complete_selected(query, context) -> None:
 
     for task in selected_tasks:
         try:
-            # Resolver ID completo
-            full_id = await service.resolve_task_id(task["id"][:8])
+            # Ya tenemos el ID completo en task["id"]
+            full_id = task["id"]
             if full_id:
                 result = await service.complete(full_id)
                 if result:

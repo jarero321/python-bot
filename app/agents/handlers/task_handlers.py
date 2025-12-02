@@ -667,7 +667,8 @@ class TaskDeleteHandler(BaseIntentHandler):
                 keyboard.append([
                     InlineKeyboardButton(
                         f"☐ {display_title}",
-                        callback_data=f"task_toggle:{task.id[:8]}",
+                        # Usar últimos 8 caracteres porque los IDs de Notion comparten prefijo
+                        callback_data=f"task_toggle:{task.id[-8:]}",
                     ),
                 ])
 
