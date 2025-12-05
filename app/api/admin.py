@@ -226,6 +226,87 @@ async def reset_metrics():
     }
 
 
+@router.get("/sync/status")
+async def get_sync_status():
+    """
+    Obtiene estado de sincronización SQLite <-> Notion.
+    """
+    from app.services.sync_service import get_sync_service
+
+    sync_service = get_sync_service()
+    status = await sync_service.get_sync_status()
+
+    return {
+        **status,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
+@router.post("/sync/force")
+async def force_sync(background_tasks: BackgroundTasks):
+    """
+    Fuerza sincronización completa SQLite <-> Notion.
+
+    Ejecuta en background para no bloquear.
+    """
+    from app.services.sync_service import get_sync_service
+
+    async def run_sync():
+        sync_service = get_sync_service()
+        await sync_service.sync_all()
+
+    background_tasks.add_task(run_sync)
+
+    return {
+        "status": "started",
+        "message": "Sincronización iniciada en background",
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
+@router.post("/sync/tasks")
+async def sync_tasks():
+    """
+    Sincroniza solo tareas de Notion -> SQLite cache.
+    """
+    from app.services.sync_service import get_sync_service
+
+    sync_service = get_sync_service()
+    result = await sync_service.sync_tasks_from_notion()
+
+    return {
+        "status": "completed",
+        "tasks_synced": result.get("synced", 0),
+        "errors": result.get("errors", []),
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
+@router.get("/sync/cache")
+async def get_cached_tasks(
+    status: str | None = None,
+    context: str | None = None,
+    limit: int = 50,
+):
+    """
+    Obtiene tareas del cache local (rápido, sin llamar a Notion).
+    """
+    from app.services.sync_service import get_sync_service
+
+    sync_service = get_sync_service()
+    tasks = await sync_service.get_cached_tasks(
+        status=status,
+        context=context,
+        limit=limit,
+    )
+
+    return {
+        "count": len(tasks),
+        "tasks": tasks,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
 @router.delete("/clear-index")
 async def clear_rag_index():
     """

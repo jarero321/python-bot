@@ -231,6 +231,95 @@ class PendingInteraction(Base):
         return f"<PendingInteraction(id={self.id}, type={self.interaction_type}, responded={self.responded})>"
 
 
+class SyncDirection(str, PyEnum):
+    """Dirección de sincronización."""
+
+    SQLITE_TO_NOTION = "sqlite_to_notion"
+    NOTION_TO_SQLITE = "notion_to_sqlite"
+
+
+class SyncStatus(str, PyEnum):
+    """Estado de sincronización."""
+
+    PENDING = "pending"
+    SYNCED = "synced"
+    CONFLICT = "conflict"
+    ERROR = "error"
+
+
+class SyncLog(Base):
+    """Log de sincronización entre SQLite y Notion."""
+
+    __tablename__ = "sync_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # Entidad a sincronizar
+    entity_type: Mapped[str] = mapped_column(String(50), index=True)  # task, reminder, daily_log
+    entity_id: Mapped[str] = mapped_column(String(100), index=True)  # ID local o de Notion
+    notion_page_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+    # Estado de sync
+    sync_direction: Mapped[SyncDirection] = mapped_column(Enum(SyncDirection), nullable=False)
+    status: Mapped[SyncStatus] = mapped_column(
+        Enum(SyncStatus), default=SyncStatus.PENDING, nullable=False
+    )
+
+    # Tracking de cambios
+    local_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    notion_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # Datos para resolver conflictos
+    local_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)  # SHA256
+    notion_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    # Error info
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return f"<SyncLog(entity={self.entity_type}:{self.entity_id}, status={self.status})>"
+
+
+class NotionTaskCache(Base):
+    """Cache local de tareas de Notion para sincronización rápida."""
+
+    __tablename__ = "notion_task_cache"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    notion_page_id: Mapped[str] = mapped_column(String(36), unique=True, index=True)
+
+    # Datos de la tarea
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=True)
+    priority: Mapped[str] = mapped_column(String(50), nullable=True)
+    due_date: Mapped[str | None] = mapped_column(String(10), nullable=True)  # YYYY-MM-DD
+    project_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    context: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    # Metadata de Notion
+    notion_created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    notion_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # Cache control
+    cached_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    is_stale: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    def __repr__(self) -> str:
+        return f"<NotionTaskCache(id={self.notion_page_id}, title={self.title[:30]})>"
+
+
 class DailyLog(Base):
     """Log diario para tracking de hábitos."""
 

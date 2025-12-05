@@ -1614,6 +1614,140 @@ class NotionService:
         await cache.delete(NotionCacheKeys.DEBTS_ACTIVE)
         await cache.delete(NotionCacheKeys.DEBT_SUMMARY)
 
+    # ==================== SYNC METHODS ====================
+
+    async def get_all_tasks(self, limit: int = 100) -> list[dict[str, Any]]:
+        """Obtiene todas las tareas ordenadas por última modificación."""
+        try:
+            response = await self.client.databases.query(
+                database_id=NotionDatabase.TASKS,
+                sorts=[{"timestamp": "last_edited_time", "direction": "descending"}],
+                page_size=min(limit, 100),
+            )
+            return response.get("results", [])
+        except APIResponseError as e:
+            logger.error(f"Error obteniendo todas las tareas: {e}")
+            return []
+
+    async def update_task_status(self, page_id: str, status: str) -> dict[str, Any] | None:
+        """Actualiza el estado de una tarea."""
+        try:
+            response = await self.client.pages.update(
+                page_id=page_id,
+                properties={
+                    "Estado": {"select": {"name": status}},
+                },
+            )
+            logger.info(f"Tarea {page_id} actualizada a {status}")
+            await self.invalidate_tasks_cache()
+            return response
+        except APIResponseError as e:
+            logger.error(f"Error actualizando tarea {page_id}: {e}")
+            return None
+
+    async def get_workout_by_date(self, date: str) -> dict[str, Any] | None:
+        """Obtiene workout por fecha (YYYY-MM-DD)."""
+        try:
+            response = await self.client.databases.query(
+                database_id=NotionDatabase.WORKOUTS,
+                filter={
+                    "property": "Fecha",
+                    "title": {"equals": date},
+                },
+            )
+            results = response.get("results", [])
+            return results[0] if results else None
+        except APIResponseError as e:
+            logger.error(f"Error buscando workout {date}: {e}")
+            return None
+
+    async def create_workout(self, data: dict[str, Any]) -> dict[str, Any] | None:
+        """Crea un nuevo workout."""
+        try:
+            properties = {
+                "Fecha": {"title": [{"text": {"content": data.get("Fecha", "")}}]},
+                "Completado": {"checkbox": data.get("Completado", False)},
+            }
+
+            if data.get("Tipo"):
+                properties["Tipo"] = {"select": {"name": data["Tipo"]}}
+
+            if data.get("Notas"):
+                properties["Notas"] = {"rich_text": [{"text": {"content": data["Notas"]}}]}
+
+            response = await self.client.pages.create(
+                parent={"database_id": NotionDatabase.WORKOUTS},
+                properties=properties,
+            )
+            logger.info(f"Workout creado: {data.get('Fecha')}")
+            return response
+        except APIResponseError as e:
+            logger.error(f"Error creando workout: {e}")
+            return None
+
+    async def update_workout(self, page_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
+        """Actualiza un workout existente."""
+        try:
+            properties = {}
+
+            if "Completado" in data:
+                properties["Completado"] = {"checkbox": data["Completado"]}
+
+            if "Notas" in data:
+                properties["Notas"] = {"rich_text": [{"text": {"content": data["Notas"]}}]}
+
+            if "Tipo" in data:
+                properties["Tipo"] = {"select": {"name": data["Tipo"]}}
+
+            response = await self.client.pages.update(
+                page_id=page_id,
+                properties=properties,
+            )
+            logger.info(f"Workout actualizado: {page_id}")
+            return response
+        except APIResponseError as e:
+            logger.error(f"Error actualizando workout: {e}")
+            return None
+
+    async def get_nutrition_by_date(self, date: str) -> dict[str, Any] | None:
+        """Obtiene nutrición por fecha (YYYY-MM-DD)."""
+        try:
+            response = await self.client.databases.query(
+                database_id=NotionDatabase.NUTRITION,
+                filter={
+                    "property": "Fecha",
+                    "title": {"equals": date},
+                },
+            )
+            results = response.get("results", [])
+            return results[0] if results else None
+        except APIResponseError as e:
+            logger.error(f"Error buscando nutrition {date}: {e}")
+            return None
+
+    async def update_nutrition(self, page_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
+        """Actualiza entrada de nutrición."""
+        try:
+            properties = {}
+
+            # Solo actualizamos campos numéricos si existen
+            # Los campos de calorías son fórmulas en Notion, no se pueden editar directamente
+
+            if "Notas" in data:
+                properties["Notas"] = {"rich_text": [{"text": {"content": data["Notas"]}}]}
+
+            if properties:
+                response = await self.client.pages.update(
+                    page_id=page_id,
+                    properties=properties,
+                )
+                logger.info(f"Nutrition actualizado: {page_id}")
+                return response
+            return None
+        except APIResponseError as e:
+            logger.error(f"Error actualizando nutrition: {e}")
+            return None
+
 
 # Singleton
 _notion_service: NotionService | None = None

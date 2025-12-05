@@ -69,6 +69,10 @@ async def setup_scheduler() -> AsyncIOScheduler:
         send_daily_metrics_summary,
         send_performance_alert,
     )
+    from app.scheduler.jobs.sync_job import (
+        run_full_sync,
+        sync_tasks_only,
+    )
 
     # ==================== MORNING BRIEFING ====================
     # 6:30 AM todos los días
@@ -342,6 +346,28 @@ async def setup_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
     logger.info("Job configurado: Performance Alert Check (cada hora)")
+
+    # ==================== SYNC SQLITE <-> NOTION ====================
+
+    # Sincronización completa cada 15 minutos
+    scheduler.add_job(
+        run_full_sync,
+        IntervalTrigger(minutes=15),
+        id="full_sync",
+        name="Full SQLite-Notion Sync",
+        replace_existing=True,
+    )
+    logger.info("Job configurado: Full Sync (cada 15 min)")
+
+    # Sincronización de tareas cada 5 minutos
+    scheduler.add_job(
+        sync_tasks_only,
+        IntervalTrigger(minutes=5),
+        id="tasks_sync",
+        name="Tasks Sync (Notion -> SQLite)",
+        replace_existing=True,
+    )
+    logger.info("Job configurado: Tasks Sync (cada 5 min)")
 
     # Iniciar scheduler si no está corriendo
     if not scheduler.running:
