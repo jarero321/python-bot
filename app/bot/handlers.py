@@ -319,6 +319,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     Delega al sistema de registry para procesar el mensaje con AI.
     """
+    # Verificar si estamos en flujo de Jira HU Builder
+    from app.agents.handlers.jira_handlers import process_jira_context
+
+    if context.user_data.get("awaiting_jira_context"):
+        user_message = update.message.text
+        if user_message:
+            processed = await process_jira_context(update, context, user_message)
+            if processed:
+                return
+
     from app.core.routing import handle_message_with_registry
 
     await handle_message_with_registry(update, context)
@@ -845,6 +855,28 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 "⏭️ Planificación saltada. ¡Descansa bien!",
                 parse_mode="HTML",
             )
+
+        # ==================== JIRA HU BUILDER CALLBACKS ====================
+        elif action in ("jira_done_all", "jira_need_help", "jira_partial", "jira_finish"):
+            from app.agents.handlers.jira_handlers import handle_jira_callback
+            await handle_jira_callback(update, context)
+
+        elif action.startswith("jira_select:"):
+            from app.agents.handlers.jira_handlers import handle_jira_callback
+            await handle_jira_callback(update, context)
+
+        elif action.startswith("jira_template:"):
+            from app.agents.handlers.jira_handlers import handle_jira_callback
+            await handle_jira_callback(update, context)
+
+        elif action.startswith("jira_skip:"):
+            from app.agents.handlers.jira_handlers import handle_jira_callback
+            await handle_jira_callback(update, context)
+
+        elif action == "jira_next":
+            # Pasar a la siguiente tarea
+            from app.agents.handlers.jira_handlers import handle_jira_need_help
+            await handle_jira_need_help(update, context)
 
         # Default
         else:

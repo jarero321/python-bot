@@ -73,6 +73,7 @@ async def setup_scheduler() -> AsyncIOScheduler:
         run_full_sync,
         sync_tasks_only,
     )
+    from app.scheduler.jobs.jira_reminder import jira_reminder_job
 
     # ==================== MORNING BRIEFING ====================
     # 6:30 AM todos los días
@@ -346,6 +347,18 @@ async def setup_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
     logger.info("Job configurado: Performance Alert Check (cada hora)")
+
+    # ==================== JIRA REMINDER ====================
+
+    # Recordatorio de Jira a las 6:30 PM (L-V)
+    scheduler.add_job(
+        jira_reminder_job,
+        CronTrigger(hour=18, minute=30, day_of_week="mon-fri"),
+        id="jira_reminder",
+        name="Jira Reminder",
+        replace_existing=True,
+    )
+    logger.info("Job configurado: Jira Reminder (6:30 PM L-V)")
 
     # ==================== SYNC SQLITE <-> NOTION ====================
 

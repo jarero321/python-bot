@@ -20,23 +20,26 @@ async def morning_briefing_job() -> None:
     - Incluir contexto de tareas y hábitos
     - Mensaje personalizado según el día
 
-    Solo se ejecuta en horario laboral (6:00 - 18:00) de lunes a viernes.
+    En fin de semana envía un briefing ligero.
     """
-    now = datetime.now()
+    from app.utils.schedule_helpers import is_weekend, get_weekend_briefing_message
 
-    # Validar día laboral (lunes=0 a viernes=4)
-    if now.weekday() > 4:
-        logger.info(f"Morning briefing omitido - es fin de semana ({now.strftime('%A')})")
-        return
+    now = datetime.now()
 
     # Validar horario (6:00 - 18:00)
     if now.hour < 6 or now.hour >= 18:
         logger.info(f"Morning briefing omitido - fuera del horario ({now.hour}:00)")
         return
 
-    logger.info("Ejecutando Morning Briefing...")
-
     telegram = get_telegram_service()
+
+    # Fin de semana: briefing ligero
+    if is_weekend(now):
+        logger.info("Enviando briefing ligero de fin de semana")
+        await telegram.send_message(get_weekend_briefing_message())
+        return
+
+    logger.info("Ejecutando Morning Briefing...")
 
     try:
         # Usar el orquestador para generar el plan
