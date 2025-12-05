@@ -376,18 +376,11 @@ class TaskEnricher(BaseEnricher):
                 logger.info(f"Proyecto encontrado solo por nombre: {match['name']}")
                 return match
 
-            # Si hay contexto pero no match, sugerir el primer proyecto del tipo correcto
-            if preferred_projects:
-                first_match = preferred_projects[0]
-                logger.info(f"Proyecto sugerido por contexto: {first_match.name}")
-                return {
-                    "id": first_match.id,
-                    "name": first_match.name,
-                    "type": first_match.type.value if first_match.type else None,
-                    "confidence": "low",
-                    "matched_by": "context_only",
-                }
-
+            # NO auto-asignar proyecto si no hay match claro
+            # Antes: asignaba el primer proyecto del tipo, causando que todo
+            # cayera en "Carlos - TikTok" u otro proyecto default
+            # Ahora: dejamos None y el usuario elige
+            logger.info("No se encontró proyecto relacionado - dejando sin asignar")
             return None
 
         except Exception as e:

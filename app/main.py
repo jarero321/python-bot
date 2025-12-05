@@ -14,6 +14,13 @@ from app.api.telegram_webhook import router as telegram_router
 from app.api.admin import router as admin_router
 from app.config import get_settings
 from app.utils.errors import CarlosCommandError, ErrorCategory, log_error
+from app.utils.alerts import (
+    send_startup_alert,
+    send_shutdown_alert,
+    alert_critical_error,
+    send_health_alert,
+)
+from app.utils.metrics import metrics_middleware
 
 settings = get_settings()
 
@@ -123,7 +130,21 @@ async def lifespan(app: FastAPI):
     await telegram_app.initialize()
     logger.info("Telegram Bot inicializado")
 
+    # Enviar alerta de inicio
+    try:
+        await send_startup_alert()
+        logger.info("Alerta de inicio enviada")
+    except Exception as e:
+        logger.warning(f"No se pudo enviar alerta de inicio: {e}")
+
     yield
+
+    # Enviar alerta de apagado
+    try:
+        await send_shutdown_alert("normal")
+        logger.info("Alerta de apagado enviada")
+    except Exception as e:
+        logger.warning(f"No se pudo enviar alerta de apagado: {e}")
 
     # Shutdown Telegram
     await telegram_app.shutdown()
@@ -155,6 +176,9 @@ app.add_middleware(
 )
 
 
+# Metrics middleware
+app.middleware("http")(metrics_middleware)
+
 # Routers
 app.include_router(telegram_router)
 app.include_router(admin_router)
@@ -168,7 +192,13 @@ async def error_handling_middleware(request: Request, call_next):
         response = await call_next(request)
         return response
     except CarlosCommandError as e:
-        log_error(e, f"request:{request.url.path}", e.category)
+        # Alertar errores críticos
+        await alert_critical_error(
+            e,
+            f"request:{request.url.path}",
+            e.category,
+            {"path": request.url.path, "method": request.method},
+        )
         return JSONResponse(
             status_code=500,
             content={
@@ -178,7 +208,13 @@ async def error_handling_middleware(request: Request, call_next):
             },
         )
     except Exception as e:
-        log_error(e, f"request:{request.url.path}", ErrorCategory.UNKNOWN)
+        # Alertar errores no manejados
+        await alert_critical_error(
+            e,
+            f"request:{request.url.path}",
+            ErrorCategory.UNKNOWN,
+            {"path": request.url.path, "method": request.method},
+        )
         return JSONResponse(
             status_code=500,
             content={

@@ -61,6 +61,14 @@ async def setup_scheduler() -> AsyncIOScheduler:
         sync_rag_index_job,
         cleanup_stale_rag_entries_job,
     )
+    from app.scheduler.jobs.interaction_follow_up import (
+        check_pending_interactions_job,
+        cleanup_interactions_job,
+    )
+    from app.scheduler.jobs.metrics_sync import (
+        send_daily_metrics_summary,
+        send_performance_alert,
+    )
 
     # ==================== MORNING BRIEFING ====================
     # 6:30 AM todos los días
@@ -290,6 +298,50 @@ async def setup_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
     logger.info("Job configurado: RAG Cleanup (4:00 AM)")
+
+    # ==================== INTERACTION FOLLOW-UP ====================
+
+    # Verificar interacciones ignoradas cada 20 minutos (horario laboral)
+    scheduler.add_job(
+        check_pending_interactions_job,
+        CronTrigger(hour="9-18", minute="*/20", day_of_week="mon-fri"),
+        id="interaction_follow_up",
+        name="Interaction Follow-up",
+        replace_existing=True,
+    )
+    logger.info("Job configurado: Interaction Follow-up (cada 20 min, 9-18 L-V)")
+
+    # Limpieza de interacciones antiguas (5 AM diario)
+    scheduler.add_job(
+        cleanup_interactions_job,
+        CronTrigger(hour=5, minute=0),
+        id="interaction_cleanup",
+        name="Interaction Cleanup",
+        replace_existing=True,
+    )
+    logger.info("Job configurado: Interaction Cleanup (5:00 AM)")
+
+    # ==================== METRICS & MONITORING ====================
+
+    # Resumen diario de métricas (11:55 PM)
+    scheduler.add_job(
+        send_daily_metrics_summary,
+        CronTrigger(hour=23, minute=55),
+        id="daily_metrics_summary",
+        name="Daily Metrics Summary",
+        replace_existing=True,
+    )
+    logger.info("Job configurado: Daily Metrics Summary (11:55 PM)")
+
+    # Alertas de rendimiento cada hora
+    scheduler.add_job(
+        send_performance_alert,
+        IntervalTrigger(hours=1),
+        id="performance_alert",
+        name="Performance Alert Check",
+        replace_existing=True,
+    )
+    logger.info("Job configurado: Performance Alert Check (cada hora)")
 
     # Iniciar scheduler si no está corriendo
     if not scheduler.running:

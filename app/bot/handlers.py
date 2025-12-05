@@ -678,6 +678,64 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 parse_mode="HTML",
             )
 
+        elif action == "checkin_bad_day":
+            # "Hoy no es mi día" - respeta al usuario
+            await query.edit_message_text(
+                "🫂 <b>Está bien, todos tenemos esos días.</b>\n\n"
+                "No te molestaré más hoy con check-ins.\n"
+                "Si cambias de opinión, solo escríbeme.",
+                parse_mode="HTML",
+            )
+            # TODO: Marcar "do not disturb" hasta mañana
+
+        elif action == "checkin_random_task":
+            # Sorpréndeme - elegir tarea random
+            await handle_random_task(query, context)
+
+        elif action == "checkin_working_external":
+            # Trabajando en algo fuera del bot
+            await query.edit_message_text(
+                "💼 <b>Entendido</b>\n\n"
+                "Estás en algo importante fuera del sistema.\n"
+                "Cuando termines, cuéntame cómo te fue.",
+                parse_mode="HTML",
+            )
+
+        elif action == "task_start":
+            # Iniciar tarea (cambiar de Today a Doing)
+            task_id = parts[1] if len(parts) > 1 else None
+            await handle_start_task(query, context, task_id)
+
+        elif action == "followup_ok":
+            await query.edit_message_text(
+                "👍 ¡Me alegra saber que estás bien!",
+                parse_mode="HTML",
+            )
+
+        elif action == "followup_busy":
+            await query.edit_message_text(
+                "💼 Entendido, estás ocupado. ¡Éxito con lo que estés haciendo!",
+                parse_mode="HTML",
+            )
+
+        elif action == "followup_dnd":
+            await query.edit_message_text(
+                "🔕 <b>Modo no molestar activado</b>\n\n"
+                "No te enviaré más mensajes hoy.\n"
+                "Mañana arrancamos de nuevo.",
+                parse_mode="HTML",
+            )
+            # TODO: Marcar DND hasta mañana
+
+        elif action == "followup_acknowledged":
+            await query.edit_message_text("✅ Perfecto, gracias por confirmar.")
+
+        elif action == "followup_later":
+            await query.edit_message_text(
+                "⏰ Ok, te lo recuerdo más tarde.",
+                parse_mode="HTML",
+            )
+
         elif action in ("checkin_good", "checkin_switch"):
             # Aliases de checkin_status_keyboard
             if action == "checkin_good":
@@ -2738,6 +2796,143 @@ async def handle_suggest_tasks_today(query, context) -> None:
         logger.error(f"Error sugiriendo tareas: {e}")
         await query.edit_message_text(
             "❌ Error obteniendo sugerencias. Intenta de nuevo.",
+            parse_mode="HTML",
+        )
+
+
+async def handle_random_task(query, context) -> None:
+    """Elige una tarea random de las pendientes para hoy."""
+    import random
+    from app.services.notion import get_notion_service, TaskEstado
+
+    try:
+        await query.edit_message_text("🎲 <b>Eligiendo tarea...</b>", parse_mode="HTML")
+
+        notion = get_notion_service()
+        today_tasks = await notion.get_tasks_by_estado(TaskEstado.TODAY, limit=10)
+
+        if not today_tasks:
+            await query.edit_message_text(
+                "📋 <b>No hay tareas para hoy</b>\n\n"
+                "Primero agrega algunas tareas a tu día.",
+                parse_mode="HTML",
+            )
+            return
+
+        # Elegir una al azar
+        chosen = random.choice(today_tasks)
+        props = chosen.get("properties", {})
+        title = props.get("Tarea", {}).get("title", [])
+        task_name = title[0].get("text", {}).get("content", "Sin título") if title else "Sin título"
+        task_id = chosen.get("id", "")[:8]
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "▶️ Empezar esta",
+                    callback_data=f"task_start:{task_id}",
+                ),
+                InlineKeyboardButton(
+                    "🎲 Otra",
+                    callback_data="checkin_random_task",
+                ),
+            ],
+        ])
+
+        await query.edit_message_text(
+            f"🎯 <b>Tu tarea es:</b>\n\n"
+            f"{task_name}\n\n"
+            f"<i>El destino ha hablado.</i>",
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+
+    except Exception as e:
+        logger.error(f"Error eligiendo tarea random: {e}")
+        await query.edit_message_text(
+            "❌ Error eligiendo tarea. Intenta de nuevo.",
+            parse_mode="HTML",
+        )
+
+
+async def handle_start_task(query, context, task_id_short: str | None) -> None:
+    """Inicia una tarea (cambia de Today a Doing)."""
+    from app.services.notion import get_notion_service, TaskEstado
+
+    if not task_id_short:
+        await query.edit_message_text("❌ Error: ID de tarea no válido.")
+        return
+
+    try:
+        await query.edit_message_text("⏳ <b>Iniciando tarea...</b>", parse_mode="HTML")
+
+        notion = get_notion_service()
+
+        # Buscar la tarea por ID parcial
+        today_tasks = await notion.get_tasks_by_estado(TaskEstado.TODAY, limit=50)
+        task = None
+        task_name = ""
+
+        for t in today_tasks:
+            if t.get("id", "").startswith(task_id_short):
+                task = t
+                props = t.get("properties", {})
+                title = props.get("Tarea", {}).get("title", [])
+                task_name = title[0].get("text", {}).get("content", "Sin título") if title else "Sin título"
+                break
+
+        if not task:
+            await query.edit_message_text(
+                "❌ <b>Tarea no encontrada</b>\n\n"
+                "La tarea puede haber sido modificada.",
+                parse_mode="HTML",
+            )
+            return
+
+        # Cambiar estado a Doing
+        await notion.client.pages.update(
+            page_id=task.get("id"),
+            properties={
+                "Estado": {"select": {"name": TaskEstado.DOING.value}},
+            },
+        )
+
+        # Invalidar cache
+        await notion.invalidate_tasks_cache()
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "✅ Completar",
+                    callback_data=f"task_complete:{task_id_short}",
+                ),
+                InlineKeyboardButton(
+                    "🚧 Bloqueado",
+                    callback_data=f"task_block:{task_id_short}",
+                ),
+            ],
+        ])
+
+        await query.edit_message_text(
+            f"⚡ <b>¡Tarea iniciada!</b>\n\n"
+            f"{task_name}\n\n"
+            f"<i>Enfócate. Tú puedes.</i>",
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+
+        # Marcar interacción como respondida
+        from app.services.interaction_tracker import get_interaction_tracker
+        tracker = get_interaction_tracker()
+        await tracker.mark_responded(
+            chat_id=str(query.message.chat_id),
+            response_type="task_started",
+        )
+
+    except Exception as e:
+        logger.error(f"Error iniciando tarea: {e}")
+        await query.edit_message_text(
+            "❌ Error iniciando tarea. Intenta de nuevo.",
             parse_mode="HTML",
         )
 

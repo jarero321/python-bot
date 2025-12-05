@@ -70,6 +70,20 @@ class SpendingAnalysisResult:
     debt_payment_impact: str  # Cuánto retrasaría el pago de deuda
 
 
+@dataclass
+class SpendingAnalysisExtended(SpendingAnalysisResult):
+    """Resultado extendido para integración con FinanceEnricher."""
+
+    is_essential: bool = False
+    category: str = "general"
+    alternatives: list[str] | None = None
+    wait_suggestion: str = ""
+
+    def __post_init__(self):
+        if self.alternatives is None:
+            self.alternatives = []
+
+
 class SpendingAnalyzerAgent(BaseAgent):
     """Agent para analizar compras potenciales."""
 
@@ -263,6 +277,92 @@ class SpendingAnalyzerAgent(BaseAgent):
             return f"Representa {debt_percentage:.1f}% de tu deuda actual"
         else:
             return "Impacto mínimo en tu deuda"
+
+    async def analyze_purchase(
+        self,
+        description: str,
+        amount: float,
+        financial_context: dict | None = None,
+    ) -> "SpendingAnalysisExtended":
+        """
+        Analiza una compra potencial con contexto financiero.
+
+        Este método es un wrapper para integrarse con el FinanceEnricher.
+
+        Args:
+            description: Descripción del item
+            amount: Monto de la compra
+            financial_context: Contexto financiero opcional
+
+        Returns:
+            SpendingAnalysisExtended con análisis completo
+        """
+        budget = (financial_context or {}).get("monthly_budget", self.monthly_budget)
+        debt = (financial_context or {}).get("pending_debts", self.current_debt)
+
+        # Construir mensaje con monto
+        message = f"{description} por ${amount:,.0f}"
+
+        # Ejecutar análisis base
+        base_result = await self.execute(message, budget, debt)
+
+        # Extender con más información
+        return SpendingAnalysisExtended(
+            amount=base_result.amount,
+            necessity_score=base_result.necessity_score,
+            budget_impact=base_result.budget_impact,
+            recommendation=base_result.recommendation,
+            honest_questions=base_result.honest_questions,
+            budget_after_purchase=base_result.budget_after_purchase,
+            debt_payment_impact=base_result.debt_payment_impact,
+            is_essential=base_result.necessity_score >= 8,
+            category=self._guess_category(description),
+            alternatives=self._generate_alternatives(description, amount),
+            wait_suggestion=self._generate_wait_suggestion(base_result.recommendation),
+        )
+
+    def _guess_category(self, description: str) -> str:
+        """Intenta adivinar la categoría del gasto."""
+        description_lower = description.lower()
+
+        categories = {
+            "tecnología": ["phone", "celular", "laptop", "tablet", "airpods", "headphones", "audifonos"],
+            "entretenimiento": ["juego", "game", "netflix", "spotify", "suscripcion"],
+            "ropa": ["ropa", "zapato", "tenis", "camisa", "pantalon", "vestido"],
+            "comida": ["comida", "restaurante", "cafe", "almuerzo"],
+            "transporte": ["uber", "taxi", "gasolina", "pasaje"],
+            "salud": ["medicina", "doctor", "gym", "vitamina"],
+        }
+
+        for category, keywords in categories.items():
+            if any(kw in description_lower for kw in keywords):
+                return category
+
+        return "general"
+
+    def _generate_alternatives(self, description: str, amount: float) -> list[str]:
+        """Genera alternativas a la compra."""
+        alternatives = []
+
+        if amount >= 3000:
+            alternatives.append(f"Esperar al Buen Fin o Black Friday para descuentos")
+
+        if amount >= 1000:
+            alternatives.append("Buscar opciones reacondicionadas o de segunda mano")
+
+        alternatives.append("Comparar precios en diferentes tiendas antes de decidir")
+
+        return alternatives
+
+    def _generate_wait_suggestion(self, recommendation: SpendingRecommendation) -> str:
+        """Genera sugerencia de espera según la recomendación."""
+        suggestions = {
+            SpendingRecommendation.BUY: "Si realmente lo necesitas, adelante. Solo asegúrate de que cabe en tu presupuesto.",
+            SpendingRecommendation.WAIT: "Aplica la regla de las 24-48 horas. Si sigues queriéndolo, reconsidera.",
+            SpendingRecommendation.WISHLIST: "Agrégalo a tu wishlist y revísalo el día de pago.",
+            SpendingRecommendation.SKIP: "Mejor destina ese dinero a tus deudas o ahorros.",
+        }
+        return suggestions.get(recommendation, "")
 
     def format_analysis_message(self, result: SpendingAnalysisResult) -> str:
         """Formatea el resultado como mensaje para el usuario."""

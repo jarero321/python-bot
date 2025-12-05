@@ -151,6 +151,81 @@ async def sync_from_notion():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/metrics")
+async def get_metrics():
+    """
+    Obtiene métricas de rendimiento del sistema.
+
+    Incluye:
+    - Métricas de endpoints (latencia, errores)
+    - Métricas de agentes (latencia, tasa de éxito)
+    - Resumen general
+    """
+    from app.utils.metrics import get_metrics_collector
+
+    collector = get_metrics_collector()
+
+    return {
+        "summary": collector.get_summary(),
+        "endpoints": collector.get_endpoint_metrics(),
+        "agents": collector.get_agent_metrics(),
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
+@router.get("/metrics/endpoints")
+async def get_endpoint_metrics():
+    """Obtiene métricas detalladas de endpoints."""
+    from app.utils.metrics import get_metrics_collector
+
+    collector = get_metrics_collector()
+
+    return {
+        "endpoints": collector.get_endpoint_metrics(),
+        "slowest": collector.get_slowest_endpoints(10),
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
+@router.get("/metrics/agents")
+async def get_agent_metrics():
+    """Obtiene métricas detalladas de agentes."""
+    from app.utils.metrics import get_metrics_collector
+
+    collector = get_metrics_collector()
+
+    return {
+        "agents": collector.get_agent_metrics(),
+        "slowest": collector.get_slowest_agents(10),
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
+@router.post("/metrics/reset")
+async def reset_metrics():
+    """
+    Reinicia todas las métricas.
+
+    Útil para hacer benchmarks limpios.
+    """
+    if not settings.is_development:
+        raise HTTPException(
+            status_code=403,
+            detail="Esta operación solo está disponible en desarrollo",
+        )
+
+    from app.utils.metrics import get_metrics_collector
+
+    collector = get_metrics_collector()
+    collector.reset()
+
+    return {
+        "status": "reset",
+        "message": "Métricas reiniciadas",
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
 @router.delete("/clear-index")
 async def clear_rag_index():
     """

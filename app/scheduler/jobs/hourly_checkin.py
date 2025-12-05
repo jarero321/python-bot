@@ -18,7 +18,7 @@ async def hourly_checkin_job() -> None:
     Envía un check-in cada hora con información real de tareas.
 
     Incluye:
-    - Tarea actual en progreso (si hay)
+    - Tarea actual en progreso (Doing O Today como trabajo activo)
     - Progreso de tareas del día
     - Opciones contextuales según estado
     """
@@ -35,8 +35,11 @@ async def hourly_checkin_job() -> None:
         orchestrator = get_orchestrator()
         context = await orchestrator.get_context(force_refresh=True)
 
-        # Buscar tarea actualmente en "Doing"
+        # Buscar tarea actualmente en "Doing" O "Today" (ambos cuentan como trabajo activo)
         current_task = None
+        working_status = None
+
+        # Primero buscar en Doing (prioridad)
         doing_tasks = await notion.get_tasks_by_estado(TaskEstado.DOING, limit=1)
         if doing_tasks:
             props = doing_tasks[0].get("properties", {})
@@ -45,6 +48,19 @@ async def hourly_checkin_job() -> None:
                 "id": doing_tasks[0].get("id"),
                 "name": title[0].get("text", {}).get("content", "Sin título") if title else "Sin título",
             }
+            working_status = "doing"
+        else:
+            # Si no hay Doing, buscar en Today (trabajo planificado)
+            today_tasks = await notion.get_tasks_by_estado(TaskEstado.TODAY, limit=1)
+            if today_tasks:
+                props = today_tasks[0].get("properties", {})
+                title = props.get("Tarea", {}).get("title", [])
+                current_task = {
+                    "id": today_tasks[0].get("id"),
+                    "name": title[0].get("text", {}).get("content", "Sin título") if title else "Sin título",
+                    "is_today": True,  # Flag para saber que viene de Today
+                }
+                working_status = "today"
 
         # Calcular progreso del día
         today_tasks = context.tasks_today
@@ -61,12 +77,29 @@ async def hourly_checkin_job() -> None:
             completed=completed_today,
             total=total_today,
             overdue_count=len(context.tasks_overdue),
+            working_status=working_status,
         )
 
-        await telegram.send_message_with_keyboard(
+        result = await telegram.send_message_with_keyboard(
             text=message,
             reply_markup=keyboard,
         )
+
+        # Registrar interacción para seguimiento si no responde
+        if result and result.message_id:
+            from app.services.interaction_tracker import get_interaction_tracker
+
+            tracker = get_interaction_tracker()
+            await tracker.register_interaction(
+                chat_id=str(settings.telegram_chat_id),
+                message_id=result.message_id,
+                interaction_type="checkin",
+                context={
+                    "hour": hour,
+                    "has_task": current_task is not None,
+                    "task_name": current_task["name"] if current_task else None,
+                },
+            )
 
         logger.info(
             f"Hourly Check-in enviado ({hour}:30) - "
@@ -98,112 +131,132 @@ def _build_checkin(
     completed: int,
     total: int,
     overdue_count: int,
+    working_status: str | None = None,
 ) -> tuple[str, InlineKeyboardMarkup]:
     """Construye mensaje y teclado de check-in según contexto."""
 
-    # Encabezado según hora
+    # Encabezado según hora (más casual)
     header = _get_time_header(hour)
 
     # Cuerpo del mensaje
     message = f"{header}\n\n"
 
-    # Estado de tarea actual
-    if current_task:
-        message += f"<b>En progreso:</b>\n{current_task['name']}\n\n"
-        message += "¿Cómo va?"
-    else:
-        message += "<b>No hay tarea en progreso</b>\n\n"
-        if total > completed:
-            message += f"Tienes {total - completed} tareas pendientes hoy."
-        else:
-            message += "¿En qué estás trabajando?"
-
-    # Progreso del día
+    # Progress bar visual
     if total > 0:
         progress_pct = completed / total * 100
-        message += f"\n\n<b>Progreso del día:</b> {completed}/{total} ({progress_pct:.0f}%)"
+        filled = int(progress_pct / 10)
+        bar = "█" * filled + "░" * (10 - filled)
+        message += f"[{bar}] {progress_pct:.0f}%\n"
+        message += f"{completed} de {total} tareas\n\n"
 
-    # Alertas
+    # Estado de tarea actual - TONO COLABORATIVO
+    if current_task:
+        is_today = current_task.get("is_today", False)
+        if is_today:
+            message += f"📋 <b>Siguiente en la lista:</b>\n{current_task['name']}\n\n"
+            message += "¿Ya empezaste con esto?"
+        else:
+            message += f"⚡ <b>Trabajando en:</b>\n{current_task['name']}\n\n"
+            message += "¿Cómo va?"
+    else:
+        # Sin tarea - preguntar primero, no asumir
+        message += "¿En qué andas?\n"
+
+    # Alertas (menos agresivas)
     if overdue_count > 0:
-        message += f"\n\n{overdue_count} tareas atrasadas"
+        message += f"\n\n⚠️ {overdue_count} pendientes de días anteriores"
 
     # Construir teclado según contexto
-    keyboard = _build_keyboard(current_task, completed < total)
+    keyboard = _build_keyboard(current_task, completed < total, working_status)
 
     return message, keyboard
 
 
-def _build_keyboard(current_task: dict | None, has_pending: bool) -> InlineKeyboardMarkup:
-    """Construye teclado contextual."""
+def _build_keyboard(
+    current_task: dict | None,
+    has_pending: bool,
+    working_status: str | None = None,
+) -> InlineKeyboardMarkup:
+    """Construye teclado contextual - opciones colaborativas."""
     buttons = []
 
     if current_task:
-        # Tarea en progreso - opciones de estado
-        buttons.append([
-            InlineKeyboardButton(
-                "Bien, avanzando",
-                callback_data="checkin_doing_well",
-            ),
-            InlineKeyboardButton(
-                "Necesito ayuda",
-                callback_data="checkin_need_help",
-            ),
-        ])
-        buttons.append([
-            InlineKeyboardButton(
-                "Completar tarea",
-                callback_data=f"task_complete:{current_task['id'][:8]}",
-            ),
-            InlineKeyboardButton(
-                "Cambiar tarea",
-                callback_data="checkin_switch_task",
-            ),
-        ])
-        buttons.append([
-            InlineKeyboardButton(
-                "Bloqueado",
-                callback_data=f"task_block:{current_task['id'][:8]}",
-            ),
-            InlineKeyboardButton(
-                "Pausa",
-                callback_data=f"task_pause:{current_task['id'][:8]}",
-            ),
-        ])
-    else:
-        # Sin tarea activa
-        if has_pending:
+        is_today = current_task.get("is_today", False)
+
+        if is_today:
+            # Tarea de Today - preguntar si ya empezó
             buttons.append([
                 InlineKeyboardButton(
-                    "Ver tareas pendientes",
-                    callback_data="show_pending_tasks",
+                    "▶️ Empezar ahora",
+                    callback_data=f"task_start:{current_task['id'][:8]}",
+                ),
+                InlineKeyboardButton(
+                    "🔄 Otra tarea",
+                    callback_data="checkin_switch_task",
+                ),
+            ])
+        else:
+            # Tarea en Doing - opciones de progreso
+            buttons.append([
+                InlineKeyboardButton(
+                    "👍 Avanzando",
+                    callback_data="checkin_doing_well",
+                ),
+                InlineKeyboardButton(
+                    "✅ Terminé",
+                    callback_data=f"task_complete:{current_task['id'][:8]}",
                 ),
             ])
             buttons.append([
                 InlineKeyboardButton(
-                    "Estoy en algo",
-                    callback_data="checkin_working",
+                    "🔄 Cambiar",
+                    callback_data="checkin_switch_task",
                 ),
                 InlineKeyboardButton(
-                    "Tomando break",
-                    callback_data="checkin_break",
+                    "🚧 Bloqueado",
+                    callback_data=f"task_block:{current_task['id'][:8]}",
+                ),
+            ])
+    else:
+        # Sin tarea activa - preguntar, no asumir
+        if has_pending:
+            buttons.append([
+                InlineKeyboardButton(
+                    "📋 Ver opciones",
+                    callback_data="show_pending_tasks",
+                ),
+                InlineKeyboardButton(
+                    "🎲 Sorpréndeme",
+                    callback_data="checkin_random_task",
+                ),
+            ])
+            buttons.append([
+                InlineKeyboardButton(
+                    "💼 En algo fuera del bot",
+                    callback_data="checkin_working_external",
                 ),
             ])
         else:
             buttons.append([
                 InlineKeyboardButton(
-                    "Agregar tarea",
+                    "➕ Agregar tarea",
                     callback_data="menu_add",
                 ),
                 InlineKeyboardButton(
-                    "Ver backlog",
+                    "📚 Ver backlog",
                     callback_data="show_backlog",
                 ),
             ])
 
+    # Opción de "Hoy no" - SIEMPRE disponible
     buttons.append([
         InlineKeyboardButton(
-            "Todo bien",
-            callback_data="checkin_dismiss",
+            "☕ Break",
+            callback_data="checkin_break",
+        ),
+        InlineKeyboardButton(
+            "🛑 Hoy no es mi día",
+            callback_data="checkin_bad_day",
         ),
     ])
 

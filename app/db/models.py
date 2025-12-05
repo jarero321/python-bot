@@ -185,6 +185,52 @@ class UserPreference(Base):
         return f"<UserPreference(user_id={self.user_id})>"
 
 
+class PendingInteraction(Base):
+    """
+    Rastrea mensajes del bot que esperan respuesta del usuario.
+
+    Permite al bot:
+    - Saber si ignoraste un mensaje
+    - Hacer seguimiento después de X tiempo
+    - Escalar si es necesario
+    """
+
+    __tablename__ = "pending_interactions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    chat_id: Mapped[str] = mapped_column(String(50), index=True)
+    message_id: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Tipo de interacción
+    interaction_type: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # checkin, reminder, question, etc.
+
+    # Contenido para contexto
+    context: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON
+
+    # Estado
+    responded: Mapped[bool] = mapped_column(Boolean, default=False)
+    response_type: Mapped[str | None] = mapped_column(
+        String(50), nullable=True
+    )  # button_click, message, ignored
+
+    # Seguimiento
+    follow_up_count: Mapped[int] = mapped_column(Integer, default=0)
+    next_follow_up_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    max_follow_ups: Mapped[int] = mapped_column(Integer, default=2)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True
+    )
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<PendingInteraction(id={self.id}, type={self.interaction_type}, responded={self.responded})>"
+
+
 class DailyLog(Base):
     """Log diario para tracking de hábitos."""
 

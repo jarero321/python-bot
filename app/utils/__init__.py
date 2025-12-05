@@ -67,6 +67,16 @@ from app.utils.text import (
     make_bullet_list,
 )
 
+from app.utils.alerts import (
+    AlertLevel,
+    send_alert,
+    alert_critical_error,
+    sync_alert_critical_error,
+    send_startup_alert,
+    send_shutdown_alert,
+    send_health_alert,
+)
+
 __all__ = [
     # Errors
     "CarlosCommandError",
@@ -122,4 +132,12 @@ __all__ = [
     "clean_task_title",
     "escape_html",
     "make_bullet_list",
+    # Alerts
+    "AlertLevel",
+    "send_alert",
+    "alert_critical_error",
+    "sync_alert_critical_error",
+    "send_startup_alert",
+    "send_shutdown_alert",
+    "send_health_alert",
 ]

@@ -231,7 +231,132 @@ class DebtQueryHandler(BaseIntentHandler):
                 msg += f"• {debt['nombre']}: ${debt['monto']:,.0f}\n"
             msg += f"\n<b>Total:</b> ${summary['total_deuda']:,.0f}"
             msg += f"\n<b>Pago mínimo mensual:</b> ${summary['total_pago_minimo']:,.0f}"
+
+            keyboard = [
+                [
+                    InlineKeyboardButton(
+                        "💰 Registrar pago",
+                        callback_data="debt_payment_start",
+                    ),
+                ],
+            ]
+            return HandlerResponse(
+                message=msg,
+                keyboard=InlineKeyboardMarkup(keyboard),
+            )
         else:
             msg = "💳 No tienes deudas registradas. ¡Excelente!"
 
         return HandlerResponse(message=msg)
+
+
+class DebtPaymentHandler(BaseIntentHandler):
+    """Handler para registrar pagos de deuda."""
+
+    name = "DebtPaymentHandler"
+    intents = []  # Se activa via callback, no intent directo
+
+    async def handle(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        intent_result: Any,
+    ) -> HandlerResponse:
+        """Maneja el registro de un pago de deuda."""
+        entities = self.get_entities(intent_result)
+        text = self.get_raw_message(intent_result)
+
+        # Extraer monto del mensaje
+        amount = DSPyParser.extract_price(text) or entities.get("amount")
+        debt_name = entities.get("debt_name", "")
+
+        if not amount:
+            return HandlerResponse(
+                message=(
+                    "💰 <b>Registrar pago de deuda</b>\n\n"
+                    "Por favor indica el monto y la deuda:\n"
+                    "Ej: <i>Pagué $1000 de la tarjeta BBVA</i>"
+                )
+            )
+
+        # Guardar en context para confirmar
+        context.user_data["pending_debt_payment"] = {
+            "amount": amount,
+            "debt_name": debt_name,
+        }
+
+        # Obtener lista de deudas para seleccionar
+        notion = get_notion_service()
+        summary = await notion.get_debt_summary()
+
+        if summary and summary.get("deudas"):
+            keyboard = []
+            for debt in summary["deudas"][:4]:  # Máximo 4 deudas
+                keyboard.append([
+                    InlineKeyboardButton(
+                        f"{debt['nombre']} (${debt['monto']:,.0f})",
+                        callback_data=f"debt_pay:{debt['id']}:{amount}",
+                    ),
+                ])
+            keyboard.append([
+                InlineKeyboardButton("❌ Cancelar", callback_data="debt_cancel"),
+            ])
+
+            msg = (
+                f"💰 <b>Registrar pago de ${amount:,.0f}</b>\n\n"
+                "Selecciona a qué deuda aplicar este pago:"
+            )
+
+            return HandlerResponse(
+                message=msg,
+                keyboard=InlineKeyboardMarkup(keyboard),
+            )
+        else:
+            return HandlerResponse(
+                message="No tienes deudas registradas para aplicar el pago."
+            )
+
+    @staticmethod
+    async def process_payment(
+        debt_id: str,
+        amount: float,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> str:
+        """Procesa el pago de una deuda."""
+        notion = get_notion_service()
+
+        try:
+            # Actualizar deuda en Notion
+            result = await notion.apply_debt_payment(debt_id, amount)
+
+            if result:
+                debt_name = result.get("nombre", "deuda")
+                new_balance = result.get("nuevo_saldo", 0)
+
+                # Registrar transacción
+                await notion.create_transaction(
+                    amount=amount,
+                    category="pago_deuda",
+                    description=f"Pago de {debt_name}",
+                    transaction_type="debt_payment",
+                )
+
+                msg = (
+                    f"✅ <b>Pago registrado</b>\n\n"
+                    f"Deuda: {debt_name}\n"
+                    f"Pago: ${amount:,.0f}\n"
+                    f"Nuevo saldo: ${new_balance:,.0f}\n\n"
+                )
+
+                if new_balance <= 0:
+                    msg += "🎉 <b>¡Felicidades! Has liquidado esta deuda.</b>"
+                else:
+                    msg += f"<i>Sigue así, cada pago cuenta.</i>"
+
+                return msg
+            else:
+                return "❌ No se pudo registrar el pago. Intenta de nuevo."
+
+        except Exception as e:
+            logger.error(f"Error procesando pago de deuda: {e}")
+            return f"❌ Error: {str(e)}"
