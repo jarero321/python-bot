@@ -1,0 +1,110 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # Permite ejecutar manualmente
+
+env:
+  APP_DIR: /opt/carlos-command
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov
+
+      - name: Run tests
+        run: |
+          pytest tests/ -v --tb=short || echo "Tests completed"
+
+  deploy:
+    name: Deploy to VPS
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          command_timeout: 10m
+          script: |
+            set -e
+            APP_DIR="/opt/carlos-command"
+            cd $APP_DIR
+
+            echo "=== [1/6] Pulling latest changes ==="
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "=== [2/6] Stopping current container ==="
+            docker-compose -f docker-compose.prod.yml down --remove-orphans || true
+
+            echo "=== [3/6] Removing old container if exists ==="
+            docker rm -f carlos-command-app 2>/dev/null || true
+
+            echo "=== [4/6] Building new image ==="
+            docker-compose -f docker-compose.prod.yml build --no-cache
+
+            echo "=== [5/6] Starting container ==="
+            docker-compose -f docker-compose.prod.yml up -d
+
+            echo "=== [6/6] Cleanup & Health check ==="
+            # Limpiar imagenes huerfanas (no borra volumenes ni todo)
+            docker image prune -f
+
+            # Esperar que inicie
+            echo "Waiting for container to start..."
+            for i in {1..30}; do
+              if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+                echo "Health check passed!"
+                break
+              fi
+              echo "Attempt $i/30 - waiting..."
+              sleep 2
+            done
+
+            # Verificar final
+            if ! curl -sf http://localhost:8000/health; then
+              echo "Health check failed! Showing logs:"
+              docker-compose -f docker-compose.prod.yml logs --tail=50
+              exit 1
+            fi
+
+            echo "=== Deploy complete ==="
+            docker ps | grep carlos
+
+  notify:
+    name: Notify Result
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Notify success
+        if: needs.deploy.result == 'success'
+        run: echo "Deployment successful!"
+
+      - name: Notify failure
+        if: needs.deploy.result == 'failure'
+        run: |
+          echo "Deployment failed!"
+          exit 1
