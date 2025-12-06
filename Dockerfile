@@ -13,10 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Copiar requirements primero (cache de Docker)
-COPY requirements.txt .
+# Copiar requirements (prod = sin pytest, black, ruff, sentence-transformers)
+COPY requirements.prod.txt .
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir -r requirements.prod.txt
 
 # Copiar codigo
 COPY app/ ./app/

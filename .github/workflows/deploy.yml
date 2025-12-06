@@ -45,34 +45,43 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
-          command_timeout: 10m
+          command_timeout: 15m
           script: |
             set -e
             APP_DIR="/opt/carlos-command"
             cd $APP_DIR
 
-            echo "=== [1/6] Pulling latest changes ==="
+            echo "=== [1/7] Pulling latest changes ==="
             git fetch origin main
             git reset --hard origin/main
 
-            echo "=== [2/6] Stopping current container ==="
-            docker-compose -f docker-compose.prod.yml down --remove-orphans || true
+            echo "=== [2/7] Stopping current containers ==="
+            docker-compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
 
-            echo "=== [3/6] Removing old container if exists ==="
-            docker rm -f carlos-command-app 2>/dev/null || true
+            echo "=== [3/7] Building new image ==="
+            docker-compose -f docker-compose.prod.yml build
 
-            echo "=== [4/6] Building new image ==="
-            docker-compose -f docker-compose.prod.yml build --no-cache
+            echo "=== [4/7] Starting PostgreSQL ==="
+            docker-compose -f docker-compose.prod.yml up -d postgres
 
-            echo "=== [5/6] Starting container ==="
-            docker-compose -f docker-compose.prod.yml up -d
+            echo "Waiting for PostgreSQL to be healthy..."
+            for i in {1..30}; do
+              if docker-compose -f docker-compose.prod.yml exec -T postgres pg_isready -U carlos -q 2>/dev/null; then
+                echo "PostgreSQL is ready!"
+                break
+              fi
+              echo "Waiting for PostgreSQL... ($i/30)"
+              sleep 2
+            done
 
-            echo "=== [6/6] Cleanup & Health check ==="
-            # Limpiar imagenes huerfanas (no borra volumenes ni todo)
-            docker image prune -f
+            echo "=== [5/7] Running migrations ==="
+            docker-compose -f docker-compose.prod.yml run --rm migrations
 
-            # Esperar que inicie
-            echo "Waiting for container to start..."
+            echo "=== [6/7] Starting app ==="
+            docker-compose -f docker-compose.prod.yml up -d app
+
+            echo "=== [7/7] Health check ==="
+            echo "Waiting for app to start..."
             for i in {1..30}; do
               if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
                 echo "Health check passed!"
@@ -82,15 +91,17 @@ jobs:
               sleep 2
             done
 
-            # Verificar final
             if ! curl -sf http://localhost:8000/health; then
               echo "Health check failed! Showing logs:"
-              docker-compose -f docker-compose.prod.yml logs --tail=50
+              docker-compose -f docker-compose.prod.yml logs --tail=100
               exit 1
             fi
 
+            # Cleanup
+            docker image prune -f
+
             echo "=== Deploy complete ==="
-            docker ps | grep carlos
+            docker-compose -f docker-compose.prod.yml ps
 
   notify:
     name: Notify Result

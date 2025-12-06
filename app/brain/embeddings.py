@@ -1,42 +1,49 @@
 """
-Embeddings para RAG usando sentence-transformers.
+Embeddings para RAG usando Google Gemini API.
+Más ligero que sentence-transformers (no requiere PyTorch).
 """
 
 import logging
-from functools import lru_cache
-
-from sentence_transformers import SentenceTransformer
+import google.generativeai as genai
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# Modelo de embeddings (384 dimensiones)
-MODEL_NAME = "all-MiniLM-L6-v2"
+# Modelo de embeddings de Gemini (768 dimensiones)
+MODEL_NAME = "models/text-embedding-004"
 
-_model: SentenceTransformer | None = None
+_configured = False
 
 
-def get_model() -> SentenceTransformer:
-    """Obtiene el modelo de embeddings (singleton)."""
-    global _model
-    if _model is None:
-        logger.info(f"Cargando modelo de embeddings: {MODEL_NAME}")
-        _model = SentenceTransformer(MODEL_NAME)
-    return _model
+def _ensure_configured():
+    """Configura la API de Gemini si no está configurada."""
+    global _configured
+    if not _configured:
+        settings = get_settings()
+        genai.configure(api_key=settings.gemini_api_key)
+        _configured = True
+        logger.info(f"Gemini embeddings configurado: {MODEL_NAME}")
 
 
 async def get_embedding(text: str) -> list[float]:
     """
-    Genera embedding para un texto.
+    Genera embedding para un texto usando Gemini.
 
     Args:
         text: Texto a convertir
 
     Returns:
-        Vector de 384 dimensiones
+        Vector de 768 dimensiones
     """
-    model = get_model()
-    embedding = model.encode(text, convert_to_numpy=True)
-    return embedding.tolist()
+    _ensure_configured()
+
+    result = genai.embed_content(
+        model=MODEL_NAME,
+        content=text,
+        task_type="retrieval_document"
+    )
+
+    return result["embedding"]
 
 
 async def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
@@ -49,9 +56,16 @@ async def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
     Returns:
         Lista de vectores
     """
-    model = get_model()
-    embeddings = model.encode(texts, convert_to_numpy=True)
-    return [e.tolist() for e in embeddings]
+    _ensure_configured()
+
+    # Gemini soporta batch embedding
+    result = genai.embed_content(
+        model=MODEL_NAME,
+        content=texts,
+        task_type="retrieval_document"
+    )
+
+    return result["embedding"]
 
 
 def cosine_similarity(vec1: list[float], vec2: list[float]) -> float:

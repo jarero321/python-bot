@@ -6,7 +6,7 @@ python-multipart==0.0.6
 # Telegram
 python-telegram-bot==20.7
 
-# AI - Brain
+# AI - Brain (Gemini API, no PyTorch)
 google-generativeai>=0.8.0
 
 # Database - PostgreSQL
@@ -27,9 +27,3 @@ httpx~=0.25.2
 tenacity==8.2.3
 pytz==2024.1
 numpy>=1.24.0
-
-# Dev (excluidos en produccion via Dockerfile)
-pytest==7.4.4
-pytest-asyncio==0.23.3
-black==23.12.1
-ruff==0.1.11

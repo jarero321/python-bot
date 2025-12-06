@@ -122,7 +122,7 @@ class ProjectModel(Base):
     documentation_url: Mapped[str | None] = mapped_column(String(500))
 
     # Embedding para RAG
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(384))
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(768))
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -190,7 +190,7 @@ class TaskModel(Base):
     source: Mapped[str] = mapped_column(String(20), default="telegram")
 
     # Embedding para RAG
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(384))
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(768))
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -282,7 +282,7 @@ class TransactionModel(Base):
     is_recurring: Mapped[bool] = mapped_column(Boolean, default=False)
     is_necessary: Mapped[bool | None] = mapped_column(Boolean)
 
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(384))
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(768))
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -401,7 +401,7 @@ class ConversationHistoryModel(Base):
     entities_extracted: Mapped[dict | None] = mapped_column(JSONB)
     action_taken: Mapped[str | None] = mapped_column(String(100))
 
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(384))
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(768))
 
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
