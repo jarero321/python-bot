@@ -207,33 +207,36 @@ IMPORTANTE: Debes responder en JSON válido con esta estructura:
 }
 
 REGLAS CRÍTICAS:
-1. NUNCA uses mensajes de "cargando" como "Obteniendo tus tareas..." - siempre da una respuesta FINAL y COMPLETA
-2. Si no hay tareas, dilo claramente: "No tienes tareas para hoy. ¿Quieres crear una?"
+1. NUNCA uses mensajes de "cargando" como "Obteniendo tus tareas..." - siempre da una respuesta FINAL
+2. Si no hay tareas, dilo claramente
 3. Si hay tareas, formátealas con emojis y estructura clara
-4. El mensaje debe ser la respuesta DEFINITIVA, no un placeholder
-5. NUNCA incluyas botones como texto en el mensaje (ej: "[✅ OK] [📝 Editar]"). Los botones van SOLO en el campo "keyboard" del JSON, NO en "message"
-6. El campo "message" es solo texto/HTML. El campo "keyboard" es para botones interactivos de Telegram
+4. PROHIBIDO incluir corchetes con texto de botones en el mensaje. Esto está MAL: "[✅ OK] [📝 Editar]"
+5. El campo "message" es SOLO texto HTML puro, SIN representación de botones
+6. Los botones van ÚNICAMENTE en "keyboard" como array de arrays
+7. Máximo 2 botones por fila para que no se corten en móvil
 
-Ejemplo de respuesta cuando NO hay tareas:
+Ejemplo tarea creada (CORRECTO):
 {
-    "reasoning": "Usuario pregunta por tareas, no hay ninguna",
-    "tool_calls": [{"tool": "get_tasks_for_today", "args": {}}],
     "response": {
-        "message": "📋 <b>Tareas de hoy</b>\\n\\n✨ No tienes tareas pendientes.\\n\\n¿Quieres crear una nueva tarea?",
-        "keyboard": [[{"text": "➕ Nueva tarea", "callback_data": "new_task"}]]
-    },
-    "memory_updates": null
+        "message": "✅ <b>Tarea creada:</b>\\n\\n📋 Revisar código\\n├── 💼 PayCash\\n└── ⏱️ ~30 min",
+        "keyboard": [[{"text": "👍", "callback_data": "task_ok"}], [{"text": "📝 Editar", "callback_data": "task_edit"}]]
+    }
 }
 
-Ejemplo cuando SÍ hay tareas:
+Ejemplo INCORRECTO (NO hacer esto):
 {
-    "reasoning": "Usuario pregunta por tareas, hay 2 pendientes",
-    "tool_calls": [{"tool": "get_tasks_for_today", "args": {}}],
     "response": {
-        "message": "📋 <b>Tareas de hoy</b>\\n\\n🔴 <b>Revisar PRs</b> - PayCash (urgente)\\n🟡 <b>Actualizar docs</b> - Personal\\n\\n2 tareas pendientes",
-        "keyboard": [[{"text": "✅ Completar", "callback_data": "complete_menu"}]]
-    },
-    "memory_updates": {"conversation_mode": "task_management"}
+        "message": "✅ Tarea creada...\\n\\n[✅ OK] [📝 Editar]",
+        "keyboard": null
+    }
+}
+
+Ejemplo cuando NO hay tareas:
+{
+    "response": {
+        "message": "📋 <b>Tareas de hoy</b>\\n\\n✨ No tienes tareas pendientes.",
+        "keyboard": [[{"text": "➕ Nueva tarea", "callback_data": "new_task"}]]
+    }
 }
 
 Si no necesitas enviar mensaje (ej: hourly_pulse sin nada relevante), usa:
