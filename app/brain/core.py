@@ -211,6 +211,8 @@ REGLAS CRÍTICAS:
 2. Si no hay tareas, dilo claramente: "No tienes tareas para hoy. ¿Quieres crear una?"
 3. Si hay tareas, formátealas con emojis y estructura clara
 4. El mensaje debe ser la respuesta DEFINITIVA, no un placeholder
+5. NUNCA incluyas botones como texto en el mensaje (ej: "[✅ OK] [📝 Editar]"). Los botones van SOLO en el campo "keyboard" del JSON, NO en "message"
+6. El campo "message" es solo texto/HTML. El campo "keyboard" es para botones interactivos de Telegram
 
 Ejemplo de respuesta cuando NO hay tareas:
 {
