@@ -119,7 +119,7 @@ class CarlosBrain:
             response = await self._call_llm(prompt)
 
             # 3. Procesar respuesta (ejecutar tools si hay)
-            result = await self._process_response(response)
+            result = await self._process_response(response, original_message=user_message)
 
             # 4. Guardar en memoria
             if user_message:
@@ -280,9 +280,10 @@ Si no necesitas enviar mensaje (ej: hourly_pulse sin nada relevante), usa:
                 "memory_updates": None
             }
 
-    async def _process_response(self, llm_response: dict) -> BrainResponse:
+    async def _process_response(self, llm_response: dict, original_message: str | None = None) -> BrainResponse:
         """Procesa la respuesta del LLM, ejecutando tools si necesario."""
         tools_called = []
+        tool_results = []
 
         # Ejecutar tools
         tool_calls = llm_response.get("tool_calls", [])
@@ -293,9 +294,25 @@ Si no necesitas enviar mensaje (ej: hourly_pulse sin nada relevante), usa:
             logger.info(f"Ejecutando tool: {tool_name} con args: {args}")
             result = await self.tools.execute(tool_name, **args)
             tools_called.append(tool_name)
+            tool_results.append({
+                "tool": tool_name,
+                "success": result.success,
+                "data": result.data,
+                "message": result.message,
+                "error": result.error
+            })
 
             if not result.success:
                 logger.warning(f"Tool {tool_name} falló: {result.error}")
+
+        # Si hay tool_calls, hacer segundo llamado al LLM con los resultados
+        if tool_calls and tool_results:
+            followup_response = await self._generate_response_with_tool_results(
+                original_message or "",
+                tool_results
+            )
+            if followup_response:
+                llm_response["response"] = followup_response
 
         # Actualizar memoria si hay updates
         memory_updates = llm_response.get("memory_updates")
@@ -330,6 +347,51 @@ Si no necesitas enviar mensaje (ej: hourly_pulse sin nada relevante), usa:
             tools_called=tools_called,
             action_taken=llm_response.get("reasoning")
         )
+
+    async def _generate_response_with_tool_results(
+        self,
+        original_message: str,
+        tool_results: list[dict]
+    ) -> dict | None:
+        """Genera respuesta final usando los resultados de los tools."""
+        prompt = f"""## MENSAJE ORIGINAL DEL USUARIO
+{original_message}
+
+## RESULTADOS DE LOS TOOLS EJECUTADOS
+{json.dumps(tool_results, indent=2, default=str, ensure_ascii=False)}
+
+## INSTRUCCIONES
+Basándote en los resultados de los tools, genera la respuesta para el usuario.
+
+IMPORTANTE:
+- Formatea los datos de forma clara y legible
+- Usa emojis para mejor visualización
+- Si hay tareas, listalas con su prioridad y contexto
+- Si no hay tareas, indica que no hay tareas pendientes
+- Los botones van en "keyboard", NO como texto
+
+Responde SOLO con JSON:
+{{
+    "message": "Mensaje HTML formateado para Telegram",
+    "keyboard": [[{{"text": "Botón", "callback_data": "action"}}]] o null
+}}
+"""
+        try:
+            response = self.model.generate_content(prompt)
+            text = response.text
+
+            # Limpiar markdown
+            if text.startswith("```json"):
+                text = text[7:]
+            if text.startswith("```"):
+                text = text[3:]
+            if text.endswith("```"):
+                text = text[:-3]
+
+            return json.loads(text.strip())
+        except Exception as e:
+            logger.error(f"Error generando respuesta con tool results: {e}")
+            return None
 
     # ==================== Métodos de Conveniencia ====================
 
