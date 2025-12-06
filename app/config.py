@@ -42,9 +42,9 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        """URL de conexion a PostgreSQL."""
+        """URL de conexion a PostgreSQL (psycopg3 para mejor soporte pgvector)."""
         return (
-            f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
+            f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
 

@@ -44,7 +44,7 @@ async def get_embedding(text: str) -> np.ndarray:
         task_type="retrieval_document"
     )
 
-    # Retornar como numpy array para compatibilidad con pgvector/asyncpg
+    # Retornar como numpy array para compatibilidad con pgvector/psycopg3
     return np.array(result["embedding"], dtype=np.float32)
 
 

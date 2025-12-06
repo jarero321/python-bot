@@ -342,11 +342,11 @@ class ToolRegistry:
     ) -> ToolResult:
         """Crea una nueva tarea."""
         from app.db.models import TaskModel
+        from app.brain.embeddings import get_embedding
 
         async with get_session() as session:
-            # TODO: Embedding desactivado temporalmente por incompatibilidad pgvector/asyncpg
-            # from app.brain.embeddings import get_embedding
-            # embedding = await get_embedding(title)
+            # Generar embedding para RAG (búsqueda semántica, duplicados, etc.)
+            embedding = await get_embedding(title)
 
             task = TaskModel(
                 user_id=self.user_id,
@@ -362,7 +362,7 @@ class ToolRegistry:
                 parent_task_id=parent_task_id,
                 blocked_by_external=blocked_by_external,
                 blocked_at=datetime.now() if blocked_by_external else None,
-                embedding=None  # Temporalmente NULL
+                embedding=embedding
             )
 
             session.add(task)

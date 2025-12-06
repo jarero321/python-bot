@@ -9,10 +9,9 @@ python-telegram-bot==20.7
 # AI - Brain (Gemini API, no PyTorch)
 google-generativeai>=0.8.0
 
-# Database - PostgreSQL
+# Database - PostgreSQL con psycopg3 (mejor soporte pgvector)
 sqlalchemy[asyncio]==2.0.25
-asyncpg==0.29.0
-psycopg2-binary==2.9.9
+psycopg[binary]>=3.1.0
 pgvector==0.2.4
 alembic==1.13.1
 
