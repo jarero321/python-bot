@@ -56,8 +56,7 @@ jobs:
             git reset --hard origin/main
 
             echo "=== [2/7] Stopping current containers ==="
-            docker-compose -f docker-compose.prod.yml down -v --remove-orphans 2>/dev/null || true
-            # NOTA: -v borra volumenes. Quitar despues del primer deploy exitoso.
+            docker-compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
 
             echo "=== [3/7] Building new image ==="
             docker-compose -f docker-compose.prod.yml build
