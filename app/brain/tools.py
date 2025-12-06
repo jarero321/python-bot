@@ -717,7 +717,7 @@ class ToolRegistry:
                     "amount": {"type": "number"},
                     "category": {"type": "string"},
                     "description": {"type": "string"},
-                    "date": {"type": "string", "description": "YYYY-MM-DD, default hoy"}
+                    "expense_date": {"type": "string", "description": "YYYY-MM-DD, default hoy"}
                 },
                 "required": ["amount", "category"]
             },
@@ -749,7 +749,7 @@ class ToolRegistry:
         amount: float,
         category: str,
         description: str | None = None,
-        date: str | None = None
+        expense_date: str | None = None
     ) -> ToolResult:
         """Registra un gasto."""
         from app.db.models import TransactionModel
@@ -761,7 +761,7 @@ class ToolRegistry:
                 type="expense",
                 category=category,
                 description=description,
-                date=date.fromisoformat(date) if date else date.today()
+                date=date.fromisoformat(expense_date) if expense_date else date.today()
             )
             session.add(transaction)
             await session.commit()
@@ -989,7 +989,7 @@ class ToolRegistry:
             # Obtener preferencias
             profile_result = await session.execute(
                 select(UserProfileModel)
-                .where(UserProfileModel.user_id == self.user_id)
+                .where(UserProfileModel.id == self.user_id)
             )
             profile = profile_result.scalar_one_or_none()
 
@@ -1042,7 +1042,7 @@ class ToolRegistry:
         async with get_session() as session:
             result = await session.execute(
                 select(UserProfileModel)
-                .where(UserProfileModel.user_id == self.user_id)
+                .where(UserProfileModel.id == self.user_id)
             )
             profile = result.scalar_one_or_none()
 
@@ -1071,7 +1071,7 @@ class ToolRegistry:
         async with get_session() as session:
             result = await session.execute(
                 select(UserProfileModel)
-                .where(UserProfileModel.user_id == self.user_id)
+                .where(UserProfileModel.id == self.user_id)
             )
             profile = result.scalar_one_or_none()
 

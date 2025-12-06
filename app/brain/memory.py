@@ -372,17 +372,18 @@ class LongTermMemory:
 
         async with get_session() as session:
             # Usar pgvector para búsqueda
-            result = await session.execute(f"""
+            from sqlalchemy import text
+            result = await session.execute(text("""
                 SELECT id, title, status, context, project_id,
                        1 - (embedding <=> :query_embedding) as similarity
                 FROM tasks
-                WHERE user_id = :user_id
+                WHERE user_id = :user_id::uuid
                   AND embedding IS NOT NULL
                   AND 1 - (embedding <=> :query_embedding) > :min_similarity
                 ORDER BY embedding <=> :query_embedding
                 LIMIT :limit
-            """, {
-                "query_embedding": query_embedding,
+            """), {
+                "query_embedding": str(query_embedding),
                 "user_id": self.user_id,
                 "min_similarity": min_similarity,
                 "limit": limit

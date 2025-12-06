@@ -19,10 +19,29 @@ settings = get_settings()
 
 
 async def _get_default_user_id() -> str | None:
-    """Obtiene el user_id del usuario por defecto (para triggers automáticos)."""
-    # Por ahora, usamos el chat_id de config como identificador
-    # En un sistema multi-usuario, esto sería diferente
-    return settings.telegram_chat_id
+    """
+    Obtiene el UUID del usuario por defecto (para triggers automáticos).
+
+    Busca el perfil de usuario usando el telegram_chat_id de la config
+    y retorna su UUID interno.
+    """
+    from app.db.models import UserProfileModel
+
+    telegram_id = settings.telegram_chat_id
+    if not telegram_id:
+        return None
+
+    async with get_session() as session:
+        result = await session.execute(
+            select(UserProfileModel).where(UserProfileModel.telegram_id == telegram_id)
+        )
+        profile = result.scalar_one_or_none()
+
+        if profile:
+            return str(profile.id)
+
+        logger.warning(f"No se encontró perfil para telegram_id {telegram_id}")
+        return None
 
 
 async def trigger_morning_briefing() -> None:
