@@ -4,6 +4,7 @@ Más ligero que sentence-transformers (no requiere PyTorch).
 """
 
 import logging
+import numpy as np
 import google.generativeai as genai
 from app.config import get_settings
 
@@ -25,7 +26,7 @@ def _ensure_configured():
         logger.info(f"Gemini embeddings configurado: {MODEL_NAME}")
 
 
-async def get_embedding(text: str) -> list[float]:
+async def get_embedding(text: str) -> np.ndarray:
     """
     Genera embedding para un texto usando Gemini.
 
@@ -33,7 +34,7 @@ async def get_embedding(text: str) -> list[float]:
         text: Texto a convertir
 
     Returns:
-        Vector de 768 dimensiones
+        Vector numpy de 768 dimensiones
     """
     _ensure_configured()
 
@@ -43,10 +44,11 @@ async def get_embedding(text: str) -> list[float]:
         task_type="retrieval_document"
     )
 
-    return result["embedding"]
+    # Retornar como numpy array para compatibilidad con pgvector/asyncpg
+    return np.array(result["embedding"], dtype=np.float32)
 
 
-async def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
+async def get_embeddings_batch(texts: list[str]) -> list[np.ndarray]:
     """
     Genera embeddings para múltiples textos.
 
@@ -54,7 +56,7 @@ async def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
         texts: Lista de textos
 
     Returns:
-        Lista de vectores
+        Lista de vectores numpy
     """
     _ensure_configured()
 
@@ -65,7 +67,8 @@ async def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
         task_type="retrieval_document"
     )
 
-    return result["embedding"]
+    # Retornar como lista de numpy arrays
+    return [np.array(emb, dtype=np.float32) for emb in result["embedding"]]
 
 
 def cosine_similarity(vec1: list[float], vec2: list[float]) -> float:

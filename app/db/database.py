@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import AsyncAdaptedQueuePool
 
 from app.config import get_settings
 
@@ -31,6 +32,12 @@ _engine = None
 _async_session_factory = None
 
 
+async def _init_connection(connection):
+    """Inicializa una conexión asyncpg con pgvector."""
+    from pgvector.asyncpg import register_vector
+    await register_vector(connection)
+
+
 def get_engine():
     """Obtiene el engine de PostgreSQL."""
     global _engine
@@ -41,6 +48,10 @@ def get_engine():
             pool_size=5,
             max_overflow=10,
             pool_pre_ping=True,
+            # Usar connect_args para configurar la inicialización de conexión
+            connect_args={
+                "server_settings": {"jit": "off"}  # Desactivar JIT para mejor compatibilidad
+            }
         )
     return _engine
 
@@ -59,10 +70,14 @@ def get_session_factory():
 
 @asynccontextmanager
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    """Context manager para obtener una sesión."""
+    """Context manager para obtener una sesión con pgvector registrado."""
     factory = get_session_factory()
     async with factory() as session:
         try:
+            # Registrar pgvector en la conexión subyacente
+            conn = await session.connection()
+            raw_conn = await conn.get_raw_connection()
+            await _init_connection(raw_conn.driver_connection)
             yield session
         except Exception:
             await session.rollback()
