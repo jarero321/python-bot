@@ -7,7 +7,7 @@ Sin dependencia de Notion.
 
 from datetime import date, datetime, time
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
@@ -37,7 +37,7 @@ class UserProfileModel(Base):
 
     __tablename__ = "user_profile"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     telegram_id: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     telegram_chat_id: Mapped[str] = mapped_column(String(50), nullable=False)
     name: Mapped[str] = mapped_column(String(100), default="Carlos")
@@ -99,7 +99,7 @@ class ProjectModel(Base):
 
     __tablename__ = "projects"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("user_profile.id"), nullable=False
     )
@@ -144,7 +144,7 @@ class TaskModel(Base):
 
     __tablename__ = "tasks"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("user_profile.id"), nullable=False
     )
@@ -226,7 +226,7 @@ class ReminderModel(Base):
 
     __tablename__ = "reminders"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("user_profile.id"), nullable=False
     )
@@ -265,7 +265,7 @@ class TransactionModel(Base):
 
     __tablename__ = "transactions"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("user_profile.id"), nullable=False
     )
@@ -292,7 +292,7 @@ class DebtModel(Base):
 
     __tablename__ = "debts"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("user_profile.id"), nullable=False
     )
@@ -329,7 +329,7 @@ class WorkoutModel(Base):
 
     __tablename__ = "workouts"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("user_profile.id"), nullable=False
     )
@@ -355,7 +355,7 @@ class NutritionLogModel(Base):
 
     __tablename__ = "nutrition_logs"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("user_profile.id"), nullable=False
     )
@@ -388,7 +388,7 @@ class ConversationHistoryModel(Base):
 
     __tablename__ = "conversation_history"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("user_profile.id"), nullable=False
     )
@@ -411,7 +411,7 @@ class WorkingMemoryModel(Base):
 
     __tablename__ = "working_memory"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("user_profile.id"), nullable=False
     )
@@ -436,7 +436,7 @@ class LearnedPatternModel(Base):
 
     __tablename__ = "learned_patterns"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("user_profile.id"), nullable=False
     )
@@ -464,7 +464,7 @@ class BrainMetricModel(Base):
 
     __tablename__ = "brain_metrics"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
 
     trigger_type: Mapped[str] = mapped_column(String(50), nullable=False)
 
@@ -485,7 +485,7 @@ class TriggerLogModel(Base):
 
     __tablename__ = "trigger_logs"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
 
     trigger_name: Mapped[str] = mapped_column(String(50), nullable=False)
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime)
