@@ -48,33 +48,50 @@ def _build_keyboard(keyboard_data: list[list[dict]] | None) -> InlineKeyboardMar
     return InlineKeyboardMarkup(buttons)
 
 
-async def _get_user_id(update: Update) -> str:
-    """Obtiene el user_id del mensaje."""
+async def _get_telegram_id(update: Update) -> str:
+    """Obtiene el telegram_id del mensaje."""
     return str(update.effective_chat.id)
 
 
-async def _ensure_user_profile(user_id: str, name: str) -> None:
-    """Crea el perfil de usuario si no existe."""
+async def _get_or_create_user_profile(telegram_id: str, name: str = "Usuario") -> str:
+    """
+    Obtiene o crea el perfil de usuario y retorna el UUID interno.
+
+    Args:
+        telegram_id: ID de Telegram del usuario
+        name: Nombre del usuario
+
+    Returns:
+        UUID del perfil de usuario como string
+    """
+    from uuid import uuid4
     from sqlalchemy import select
     from app.db.database import get_session
     from app.db.models import UserProfileModel
 
     async with get_session() as session:
+        # Buscar por telegram_id
         result = await session.execute(
-            select(UserProfileModel).where(UserProfileModel.user_id == user_id)
+            select(UserProfileModel).where(UserProfileModel.telegram_id == telegram_id)
         )
-        if result.scalar_one_or_none() is None:
+        profile = result.scalar_one_or_none()
+
+        if profile is None:
+            # Crear nuevo perfil con UUID generado
             profile = UserProfileModel(
-                user_id=user_id,
+                id=uuid4(),
+                telegram_id=telegram_id,
+                telegram_chat_id=telegram_id,
                 name=name,
-                telegram_chat_id=user_id,
                 timezone="America/Mexico_City",
                 work_days=["mon", "tue", "wed", "thu", "fri"],
                 gym_days=["mon", "tue", "wed", "thu", "fri"],
             )
             session.add(profile)
             await session.commit()
-            logger.info(f"Perfil creado para usuario {user_id}")
+            logger.info(f"Perfil creado para telegram_id {telegram_id} con UUID {profile.id}")
+
+        return str(profile.id)
 
 
 # ==================== COMMAND HANDLERS ====================
@@ -83,10 +100,10 @@ async def _ensure_user_profile(user_id: str, name: str) -> None:
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handler para /start."""
     user = update.effective_user
-    user_id = await _get_user_id(update)
+    telegram_id = await _get_telegram_id(update)
 
-    # Crear user_profile si no existe
-    await _ensure_user_profile(user_id, user.first_name)
+    # Crear/obtener user_profile (usa UUID internamente)
+    await _get_or_create_user_profile(telegram_id, user.first_name)
 
     await update.message.reply_html(
         f"Hola <b>{user.first_name}</b>! Soy Carlos Command.\n\n"
@@ -125,7 +142,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def today_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handler para /today - Muestra tareas de hoy via Brain."""
-    user_id = await _get_user_id(update)
+    telegram_id = await _get_telegram_id(update)
+    user_id = await _get_or_create_user_profile(telegram_id)
 
     brain = await get_brain(user_id)
     response = await brain.handle_message("¿Qué tareas tengo para hoy?")
@@ -139,7 +157,8 @@ async def today_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handler para /plan - Planifica el día via Brain."""
-    user_id = await _get_user_id(update)
+    telegram_id = await _get_telegram_id(update)
+    user_id = await _get_or_create_user_profile(telegram_id)
 
     brain = await get_brain(user_id)
     response = await brain.handle_message("Planifica mi día")
@@ -182,14 +201,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not update.message or not update.message.text:
         return
 
-    user_id = await _get_user_id(update)
+    telegram_id = await _get_telegram_id(update)
     text = update.message.text
 
-    logger.info(f"Mensaje recibido de {user_id}: {text[:50]}...")
+    logger.info(f"Mensaje recibido de {telegram_id}: {text[:50]}...")
 
     try:
         # Indicador de "escribiendo"
         await update.message.chat.send_action("typing")
+
+        # Obtener UUID del usuario
+        user_id = await _get_or_create_user_profile(telegram_id)
 
         # Procesar con el Brain
         brain = await get_brain(user_id)
@@ -224,12 +246,15 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     query = update.callback_query
     await query.answer()
 
-    user_id = await _get_user_id(update)
+    telegram_id = await _get_telegram_id(update)
     callback_data = query.data
 
-    logger.info(f"Callback de {user_id}: {callback_data}")
+    logger.info(f"Callback de {telegram_id}: {callback_data}")
 
     try:
+        # Obtener UUID del usuario
+        user_id = await _get_or_create_user_profile(telegram_id)
+
         # Procesar con el Brain
         brain = await get_brain(user_id)
         response = await brain.handle_callback(callback_data)
