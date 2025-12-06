@@ -1,4 +1,4 @@
-"""Configuración de la aplicación usando Pydantic Settings."""
+"""Configuracion de la aplicacion usando Pydantic Settings."""
 
 from functools import lru_cache
 
@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Configuración principal de Carlos Command."""
+    """Configuracion principal de Carlos Command - Brain."""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -24,20 +24,29 @@ class Settings(BaseSettings):
     telegram_webhook_url: str = ""
     telegram_chat_id: str = ""
 
-    # Notion
-    notion_api_key: str = ""
-
-    # Gemini
+    # Gemini (LLM)
     gemini_api_key: str = ""
 
-    # Database
-    database_url: str = "sqlite+aiosqlite:///data/carlos_command.db"
+    # PostgreSQL
+    postgres_host: str = "localhost"
+    postgres_port: int = 5432
+    postgres_db: str = "carlos_brain"
+    postgres_user: str = "carlos"
+    postgres_password: str = ""
 
     # Timezone
     tz: str = "America/Mexico_City"
 
-    # Ngrok
+    # Ngrok (development)
     ngrok_authtoken: str = ""
+
+    @property
+    def database_url(self) -> str:
+        """URL de conexion a PostgreSQL."""
+        return (
+            f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
 
     @property
     def is_development(self) -> bool:
@@ -50,5 +59,5 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """Obtiene la configuración cacheada."""
+    """Obtiene la configuracion cacheada."""
     return Settings()

@@ -1,316 +1,215 @@
-"""Carlos Command - FastAPI Application."""
+"""
+Carlos Command - Brain V2
+
+FastAPI application con Brain unificado.
+Sin dependencia de Notion, PostgreSQL como fuente de verdad.
+"""
 
 import logging
-import sys
-import traceback
 from contextlib import asynccontextmanager
-from datetime import datetime
 
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.telegram_webhook import router as telegram_router
-from app.api.admin import router as admin_router
 from app.config import get_settings
-from app.utils.errors import CarlosCommandError, ErrorCategory, log_error
-from app.utils.alerts import (
-    send_startup_alert,
-    send_shutdown_alert,
-    alert_critical_error,
-    send_health_alert,
-)
-from app.utils.metrics import metrics_middleware
 
+# Configurar logging
 settings = get_settings()
-
-
-def setup_logging() -> None:
-    """Configura el logging estructurado."""
-    log_format = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
-    date_format = "%Y-%m-%d %H:%M:%S"
-
-    logging.basicConfig(
-        level=getattr(logging, settings.log_level.upper()),
-        format=log_format,
-        datefmt=date_format,
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-
-    # Reducir ruido de librerías externas
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
-    logging.getLogger("telegram").setLevel(logging.WARNING)
-
-
+logging.basicConfig(
+    level=getattr(logging, settings.log_level),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Maneja el ciclo de vida de la aplicación."""
-    setup_logging()
-    logger.info("Iniciando Carlos Command...")
-    logger.info(f"Entorno: {settings.app_env}")
-    logger.info(f"Debug: {settings.debug}")
+    """Lifecycle de la aplicación."""
+    logger.info("=" * 50)
+    logger.info("Iniciando Carlos Command - Brain V2")
+    logger.info("=" * 50)
 
-    # Inicializar Core (LLM + Handlers + RAG)
-    from app.core import initialize_core
+    # ==================== STARTUP ====================
 
-    # RAG habilitado para búsqueda semántica y detección de duplicados
-    await initialize_core(include_rag=True)
-    logger.info("Core inicializado (LLM + Handlers + RAG)")
-
-    # Inicializar Domain Services (TaskService, ProjectService)
-    from app.domain.services import get_task_service, get_project_service
-
-    task_service = get_task_service()
-    await task_service.initialize()
-    logger.info("TaskService inicializado con RAG")
-
-    project_service = get_project_service()
-    await project_service.initialize()
-    logger.info("ProjectService inicializado")
-
-    # Indexación automática de tareas y proyectos existentes
-    try:
-        from app.core.rag import get_vector_store, get_retriever
-
-        vector_store = get_vector_store()
-        retriever = get_retriever()
-
-        # Solo reindexar si el índice está vacío
-        if vector_store.count == 0:
-            logger.info("Índice RAG vacío, iniciando indexación automática...")
-
-            # Indexar tareas pendientes
-            tasks_count = await task_service.reindex_all()
-            logger.info(f"Indexadas {tasks_count} tareas")
-
-            # Indexar proyectos activos
-            projects = await project_service.get_active()
-            for project in projects:
-                try:
-                    await retriever.index_project(project)
-                except Exception as e:
-                    logger.warning(f"Error indexando proyecto {project.name}: {e}")
-            logger.info(f"Indexados {len(projects)} proyectos")
-
-            logger.info(f"Indexación automática completada: {vector_store.count} documentos")
-        else:
-            logger.info(f"Índice RAG existente: {vector_store.count} documentos")
-
-    except Exception as e:
-        logger.warning(f"Error en indexación automática (no crítico): {e}")
-
-    # Inicializar base de datos
-    from app.db.database import init_db, close_db
-
+    # 1. Inicializar base de datos
+    logger.info("Inicializando base de datos PostgreSQL...")
+    from app.db.database import init_db
     await init_db()
-    logger.info("Base de datos inicializada")
 
-    # Inicializar scheduler
-    from app.scheduler.setup import setup_scheduler, shutdown_scheduler
+    # 2. Inicializar bot de Telegram
+    logger.info("Inicializando bot de Telegram...")
+    from app.bot.handlers import initialize_bot
+    telegram_app = await initialize_bot()
 
+    # 3. Inicializar scheduler de triggers
+    logger.info("Inicializando scheduler de triggers...")
+    from app.triggers import setup_scheduler
     await setup_scheduler()
-    logger.info("Scheduler inicializado")
 
-    # Inicializar Telegram Bot Application
-    from telegram.ext import Application
-    from app.bot.handlers import setup_handlers
+    # 4. Enviar alerta de inicio
+    logger.info("Enviando alerta de startup...")
+    await send_startup_alert()
 
-    telegram_app = (
-        Application.builder()
-        .token(settings.telegram_bot_token)
-        .build()
-    )
-    setup_handlers(telegram_app)
-    await telegram_app.initialize()
-    logger.info("Telegram Bot inicializado")
-
-    # Enviar alerta de inicio
-    try:
-        await send_startup_alert()
-        logger.info("Alerta de inicio enviada")
-    except Exception as e:
-        logger.warning(f"No se pudo enviar alerta de inicio: {e}")
+    logger.info("=" * 50)
+    logger.info("Carlos Command - Brain V2 listo!")
+    logger.info("=" * 50)
 
     yield
 
-    # Enviar alerta de apagado
-    try:
-        await send_shutdown_alert("normal")
-        logger.info("Alerta de apagado enviada")
-    except Exception as e:
-        logger.warning(f"No se pudo enviar alerta de apagado: {e}")
+    # ==================== SHUTDOWN ====================
 
-    # Shutdown Telegram
-    await telegram_app.shutdown()
+    logger.info("Deteniendo Carlos Command...")
+
+    # Enviar alerta de shutdown
+    await send_shutdown_alert()
 
     # Detener scheduler
+    from app.triggers import shutdown_scheduler
     await shutdown_scheduler()
 
-    # Cerrar conexiones
+    # Detener bot
+    from app.bot.handlers import shutdown_bot
+    await shutdown_bot()
+
+    # Cerrar conexiones de BD
+    from app.db.database import close_db
     await close_db()
-    logger.info("Cerrando Carlos Command...")
+
+    logger.info("Carlos Command detenido.")
 
 
+# Crear aplicación FastAPI
 app = FastAPI(
-    title="Carlos Command",
-    description="Bot de Telegram con AI agents para gestión integral de vida",
-    version="0.1.0",
+    title="Carlos Command - Brain V2",
+    description="Asistente personal inteligente con Brain unificado",
+    version="2.0.0",
     lifespan=lifespan,
-    docs_url="/docs" if settings.is_development else None,
-    redoc_url="/redoc" if settings.is_development else None,
-)
-
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"] if settings.is_development else [],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
 )
 
 
-# Metrics middleware
-app.middleware("http")(metrics_middleware)
-
-# Routers
-app.include_router(telegram_router)
-app.include_router(admin_router)
-
-
-# Middleware de manejo global de errores
-@app.middleware("http")
-async def error_handling_middleware(request: Request, call_next):
-    """Middleware para capturar errores no manejados."""
-    try:
-        response = await call_next(request)
-        return response
-    except CarlosCommandError as e:
-        # Alertar errores críticos
-        await alert_critical_error(
-            e,
-            f"request:{request.url.path}",
-            e.category,
-            {"path": request.url.path, "method": request.method},
-        )
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": e.category.value,
-                "message": str(e),
-                "path": request.url.path,
-            },
-        )
-    except Exception as e:
-        # Alertar errores no manejados
-        await alert_critical_error(
-            e,
-            f"request:{request.url.path}",
-            ErrorCategory.UNKNOWN,
-            {"path": request.url.path, "method": request.method},
-        )
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": "internal_error",
-                "message": "Error interno del servidor",
-                "path": request.url.path,
-            },
-        )
+# ==================== ROUTES ====================
 
 
 @app.get("/health")
 async def health_check():
     """Health check básico."""
-    return {
-        "status": "healthy",
-        "service": "carlos-command",
-        "version": "0.1.0",
-        "environment": settings.app_env,
-        "timestamp": datetime.utcnow().isoformat(),
-    }
+    return {"status": "healthy", "service": "carlos-brain-v2"}
 
 
 @app.get("/health/detailed")
 async def health_check_detailed():
-    """Health check detallado con estado de servicios."""
-    from app.services.notion import get_notion_service
-    from app.scheduler.setup import get_scheduler, get_job_status
-    from app.utils.cache import get_cache
+    """Health check detallado."""
+    from app.triggers.scheduler import get_scheduled_triggers
 
-    health = {
+    triggers = get_scheduled_triggers()
+
+    return {
         "status": "healthy",
-        "service": "carlos-command",
-        "version": "0.1.0",
+        "service": "carlos-brain-v2",
+        "version": "2.0.0",
         "environment": settings.app_env,
-        "timestamp": datetime.utcnow().isoformat(),
-        "checks": {},
+        "checks": {
+            "database": {"status": "healthy"},
+            "scheduler": {
+                "status": "healthy",
+                "triggers_count": len(triggers),
+            },
+            "brain": {"status": "healthy"},
+        },
     }
 
-    # Check Notion
-    try:
-        notion = get_notion_service()
-        notion_ok = await notion.test_connection()
-        health["checks"]["notion"] = {
-            "status": "healthy" if notion_ok else "unhealthy",
-            "latency_ms": None,  # TODO: medir latencia
-        }
-    except Exception as e:
-        health["checks"]["notion"] = {
-            "status": "unhealthy",
-            "error": str(e),
-        }
-        health["status"] = "degraded"
 
-    # Check Scheduler
-    try:
-        scheduler = get_scheduler()
-        jobs = get_job_status()
-        health["checks"]["scheduler"] = {
-            "status": "healthy" if scheduler.running else "unhealthy",
-            "running": scheduler.running,
-            "jobs_count": len(jobs),
-            "jobs": jobs[:5],  # Solo primeros 5
-        }
-    except Exception as e:
-        health["checks"]["scheduler"] = {
-            "status": "unhealthy",
-            "error": str(e),
-        }
-        health["status"] = "degraded"
+@app.post("/telegram/webhook")
+async def telegram_webhook(request: Request):
+    """Webhook para mensajes de Telegram."""
+    from telegram import Update
+    from app.bot.handlers import get_application
 
-    # Check Cache
     try:
-        cache = get_cache()
-        cache_stats = cache.get_stats()
-        health["checks"]["cache"] = {
-            "status": "healthy",
-            **cache_stats,
-        }
-    except Exception as e:
-        health["checks"]["cache"] = {
-            "status": "unhealthy",
-            "error": str(e),
-        }
+        data = await request.json()
+        telegram_app = await get_application()
 
-    # Check RAG / Vector Store
+        update = Update.de_json(data, telegram_app.bot)
+        await telegram_app.process_update(update)
+
+        return {"status": "ok"}
+
+    except Exception as e:
+        logger.exception(f"Error en webhook: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": str(e)}
+        )
+
+
+@app.get("/admin/triggers")
+async def get_triggers():
+    """Obtiene lista de triggers programados."""
+    from app.triggers.scheduler import get_scheduled_triggers
+    return {"triggers": get_scheduled_triggers()}
+
+
+@app.post("/admin/trigger/{trigger_name}")
+async def manual_trigger(trigger_name: str):
+    """Ejecuta un trigger manualmente."""
+    from app.triggers import handlers
+
+    handler = getattr(handlers, f"trigger_{trigger_name}", None)
+    if not handler:
+        return JSONResponse(
+            status_code=404,
+            content={"error": f"Trigger '{trigger_name}' no encontrado"}
+        )
+
+    await handler()
+    return {"status": "triggered", "trigger": trigger_name}
+
+
+# ==================== HELPERS ====================
+
+
+async def send_startup_alert():
+    """Envía alerta de inicio por Telegram."""
     try:
-        from app.core.rag import get_vector_store
-        vector_store = get_vector_store()
-        health["checks"]["rag"] = {
-            "status": "healthy",
-            "documents_indexed": vector_store.count,
-        }
-    except Exception as e:
-        health["checks"]["rag"] = {
-            "status": "unhealthy",
-            "error": str(e),
-        }
+        from telegram import Bot
 
-    return health
+        bot = Bot(token=settings.telegram_bot_token)
+        await bot.send_message(
+            chat_id=settings.telegram_chat_id,
+            text=(
+                "🚀 <b>Carlos Brain V2 iniciado</b>\n\n"
+                f"Entorno: {settings.app_env}\n"
+                "Sistema listo."
+            ),
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        logger.error(f"Error enviando alerta de startup: {e}")
+
+
+async def send_shutdown_alert():
+    """Envía alerta de shutdown por Telegram."""
+    try:
+        from telegram import Bot
+
+        bot = Bot(token=settings.telegram_bot_token)
+        await bot.send_message(
+            chat_id=settings.telegram_chat_id,
+            text="🔴 <b>Carlos Brain V2 detenido</b>",
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        logger.error(f"Error enviando alerta de shutdown: {e}")
+
+
+# ==================== DEV MODE ====================
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=settings.is_development,
+    )

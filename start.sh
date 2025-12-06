@@ -1,153 +1,128 @@
 #!/bin/bash
-# Carlos Command - Script de inicio
+# Carlos Command - Desarrollo (con ngrok)
 
 set -e
 
-echo "🚀 Carlos Command - Iniciando..."
-echo "================================"
+echo "Carlos Command - Desarrollo"
+echo "============================"
 
 # Colores
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Verificar que existe .env
+# Verificar .env
 if [ ! -f .env ]; then
-    echo -e "${RED}❌ Error: No existe archivo .env${NC}"
-    echo "   Copia .env.example a .env y configura tus tokens"
+    echo -e "${RED}Error: No existe .env${NC}"
+    echo "Copia .env.example a .env y configura"
     exit 1
 fi
 
-# Cargar variables de .env
+# Cargar variables
 export $(grep -v '^#' .env | xargs)
 
-# Verificar tokens requeridos
+# Verificar configuracion
 echo ""
-echo "📋 Verificando configuración..."
+echo "Verificando configuracion..."
 
 check_var() {
     local var_name=$1
     local var_value=$2
-    local is_required=$3
-
-    if [ -z "$var_value" ] || [ "$var_value" = "your_"* ]; then
-        if [ "$is_required" = "true" ]; then
-            echo -e "   ${RED}❌ $var_name: No configurado${NC}"
-            return 1
-        else
-            echo -e "   ${YELLOW}⚠️  $var_name: No configurado (opcional)${NC}"
-            return 0
-        fi
+    if [ -z "$var_value" ] || [[ "$var_value" == your_* ]]; then
+        echo -e "  ${RED}✗ $var_name${NC}"
+        return 1
     else
-        echo -e "   ${GREEN}✅ $var_name: Configurado${NC}"
+        echo -e "  ${GREEN}✓ $var_name${NC}"
         return 0
     fi
 }
 
 errors=0
-check_var "TELEGRAM_BOT_TOKEN" "$TELEGRAM_BOT_TOKEN" "true" || ((errors++))
-check_var "TELEGRAM_CHAT_ID" "$TELEGRAM_CHAT_ID" "true" || ((errors++))
-check_var "GEMINI_API_KEY" "$GEMINI_API_KEY" "true" || ((errors++))
-check_var "NOTION_API_KEY" "$NOTION_API_KEY" "true" || ((errors++))
-check_var "NGROK_AUTHTOKEN" "$NGROK_AUTHTOKEN" "false"
+check_var "TELEGRAM_BOT_TOKEN" "$TELEGRAM_BOT_TOKEN" || ((errors++))
+check_var "TELEGRAM_CHAT_ID" "$TELEGRAM_CHAT_ID" || ((errors++))
+check_var "GEMINI_API_KEY" "$GEMINI_API_KEY" || ((errors++))
+check_var "POSTGRES_PASSWORD" "$POSTGRES_PASSWORD" || ((errors++))
+check_var "NGROK_AUTHTOKEN" "$NGROK_AUTHTOKEN" || ((errors++))
 
 if [ $errors -gt 0 ]; then
-    echo ""
-    echo -e "${RED}❌ Faltan $errors configuraciones requeridas${NC}"
-    echo "   Edita el archivo .env y vuelve a intentar"
+    echo -e "\n${RED}Faltan $errors configuraciones${NC}"
     exit 1
 fi
-
-echo ""
-echo "🐳 Iniciando servicios con Docker..."
-echo "================================"
 
 # Verificar Docker
 if ! command -v docker &> /dev/null; then
-    echo -e "${RED}❌ Docker no está instalado${NC}"
+    echo -e "${RED}Docker no instalado${NC}"
     exit 1
 fi
 
-if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
-    echo -e "${RED}❌ Docker Compose no está instalado${NC}"
-    exit 1
-fi
-
-# Crear directorios necesarios
-mkdir -p data logs
-
-# Determinar comando de docker-compose
-if command -v docker-compose &> /dev/null; then
-    COMPOSE_CMD="docker-compose"
+# Determinar comando compose
+if docker compose version &> /dev/null; then
+    COMPOSE="docker compose"
 else
-    COMPOSE_CMD="docker compose"
+    COMPOSE="docker-compose"
 fi
 
-# Construir y levantar
-echo ""
+# Crear directorios
+mkdir -p logs
 
-# Verificar si es primera vez o se pide rebuild
+# Build si es necesario
+echo ""
 if [ "$1" = "--rebuild" ]; then
-    echo "📦 Reconstruyendo imagen (--no-cache)..."
-    $COMPOSE_CMD build --no-cache
-elif [ ! "$(docker images -q carlos-command-app 2> /dev/null)" ]; then
-    echo "📦 Primera vez - Construyendo imagen..."
-    $COMPOSE_CMD build
+    echo "Reconstruyendo..."
+    $COMPOSE build --no-cache
 else
-    echo "📦 Usando imagen existente (usa --rebuild para forzar reconstrucción)"
-    echo "   💡 El código se sincroniza automáticamente via volumen (hot reload)"
+    echo "Construyendo..."
+    $COMPOSE build
 fi
 
+# Levantar
 echo ""
-echo "🚀 Levantando servicios..."
-$COMPOSE_CMD up -d
+echo "Iniciando servicios..."
+$COMPOSE up -d
 
-# Esperar a que los servicios estén listos
+# Esperar
 echo ""
-echo "⏳ Esperando a que los servicios estén listos..."
-sleep 5
+echo "Esperando servicios..."
+sleep 8
 
-# Verificar estado
+# Estado
 echo ""
-echo "📊 Estado de servicios:"
-$COMPOSE_CMD ps
+$COMPOSE ps
 
-# Obtener URL de ngrok
+# Obtener URL ngrok
 echo ""
-echo "🔗 Obteniendo URL de ngrok..."
+echo "Obteniendo URL ngrok..."
 sleep 3
 
-NGROK_URL=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null | grep -o '"public_url":"[^"]*"' | head -1 | cut -d'"' -f4)
+NGROK_URL=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null | grep -o '"public_url":"https://[^"]*"' | head -1 | cut -d'"' -f4)
 
 if [ -n "$NGROK_URL" ]; then
-    echo -e "${GREEN}✅ URL de ngrok: $NGROK_URL${NC}"
+    echo -e "${GREEN}Ngrok: $NGROK_URL${NC}"
 
-    WEBHOOK_URL="${NGROK_URL}/webhook/telegram"
+    WEBHOOK_URL="${NGROK_URL}/telegram/webhook"
     echo ""
-    echo "📡 Configurando webhook de Telegram..."
+    echo "Configurando webhook..."
 
-    # Configurar webhook
     RESPONSE=$(curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=${WEBHOOK_URL}")
 
     if echo "$RESPONSE" | grep -q '"ok":true'; then
-        echo -e "${GREEN}✅ Webhook configurado: $WEBHOOK_URL${NC}"
+        echo -e "${GREEN}Webhook: $WEBHOOK_URL${NC}"
     else
-        echo -e "${RED}❌ Error configurando webhook: $RESPONSE${NC}"
+        echo -e "${RED}Error webhook: $RESPONSE${NC}"
     fi
 else
-    echo -e "${YELLOW}⚠️  No se pudo obtener URL de ngrok${NC}"
-    echo "   Verifica en http://localhost:4040"
+    echo -e "${YELLOW}No se obtuvo URL ngrok${NC}"
+    echo "Revisa http://localhost:4040"
 fi
 
 echo ""
-echo "================================"
-echo -e "${GREEN}🎉 Carlos Command está corriendo!${NC}"
+echo "============================"
+echo -e "${GREEN}Listo!${NC}"
 echo ""
-echo "📱 Abre Telegram y envía un mensaje a tu bot"
-echo "📊 Dashboard ngrok: http://localhost:4040"
-echo "🏥 Health check: http://localhost:8000/health"
-echo "📝 Logs: $COMPOSE_CMD logs -f app"
+echo "Telegram: Envia mensaje a tu bot"
+echo "Ngrok:    http://localhost:4040"
+echo "Health:   http://localhost:8000/health"
+echo "Logs:     $COMPOSE logs -f app"
+echo "Parar:    $COMPOSE down"
 echo ""
-echo "Para detener: $COMPOSE_CMD down"
-echo "================================"

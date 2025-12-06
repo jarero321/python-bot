@@ -1,6 +1,46 @@
 version: '3.8'
 
 services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: carlos-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-carlos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-carlos_brain}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-carlos} -d ${POSTGRES_DB:-carlos_brain}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - carlos-network
+
+  # Servicio one-shot para migraciones
+  migrations:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: carlos-migrations
+    entrypoint: ["./scripts/migrate.sh"]
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - carlos-network
+    # No restart - solo corre una vez
+    restart: "no"
+
   app:
     build:
       context: .
@@ -10,27 +50,30 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Código fuente para hot reload en desarrollo
       - ./app:/app/app:ro
-      # Base de datos persistente
-      - ./data:/app/data
-      # Logs
       - ./logs:/app/logs
     env_file:
       - .env
     environment:
       - APP_ENV=${APP_ENV:-development}
       - TZ=America/Mexico_City
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 30s
     networks:
       - carlos-network
     depends_on:
-      - ngrok
+      postgres:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+      ngrok:
+        condition: service_started
 
   ngrok:
     image: ngrok/ngrok:latest
@@ -43,9 +86,12 @@ services:
     environment:
       - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
     ports:
-      - "4040:4040"  # Dashboard de ngrok
+      - "4040:4040"
     networks:
       - carlos-network
+
+volumes:
+  postgres_data:
 
 networks:
   carlos-network:
