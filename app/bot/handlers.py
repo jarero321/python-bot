@@ -419,12 +419,17 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     Maneja callbacks especiales (help, comandos) y envía el resto al Brain.
     """
     query = update.callback_query
-    await query.answer()
-
     telegram_id = await _get_telegram_id(update)
     callback_data = query.data
 
     logger.info(f"Callback de {telegram_id}: {callback_data}")
+
+    # Responder inmediatamente para evitar timeout y dar feedback
+    # Para callbacks del Brain, mostrar "procesando"
+    if callback_data not in HELP_RESPONSES and not callback_data.startswith("cmd_"):
+        await query.answer("⏳ Procesando...")
+    else:
+        await query.answer()
 
     try:
         # Manejar callbacks especiales de ayuda
@@ -462,6 +467,29 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await query.message.reply_text(
                 "Por favor, escribe tu mensaje de nuevo."
             )
+            return
+
+        # Manejar complete_task_UUID directamente para mayor velocidad
+        if callback_data.startswith("complete_task_"):
+            task_id = callback_data.replace("complete_task_", "")
+            user_id = await _get_or_create_user_profile(telegram_id)
+            brain = await get_brain(user_id)
+            # Ejecutar directamente el tool
+            result = await brain.tools.execute("complete_task", task_id=task_id)
+            if result.success:
+                await query.edit_message_text(
+                    f"🎉 <b>¡Tarea completada!</b>\n\n✅ {result.message}",
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("📋 Ver tareas", callback_data="cmd_today")],
+                        [InlineKeyboardButton("➕ Nueva tarea", callback_data="new_task")]
+                    ])
+                )
+            else:
+                await query.edit_message_text(
+                    f"❌ Error: {result.error or 'No se pudo completar la tarea'}",
+                    parse_mode="HTML"
+                )
             return
 
         # Para otros callbacks, enviar al Brain

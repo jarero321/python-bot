@@ -239,6 +239,34 @@ Ejemplo cuando NO hay tareas:
     }
 }
 
+Ejemplo LISTA de tareas (con botones INDIVIDUALES por tarea):
+{
+    "response": {
+        "message": "📋 <b>Tareas de hoy</b>\\n\\n1️⃣ Revisar PRs\\n├── 💼 PayCash\\n└── ⏱️ ~30 min\\n\\n2️⃣ Actualizar docs\\n├── 💼 PayCash\\n└── ⏱️ ~1h",
+        "keyboard": [
+            [{"text": "✅ Completar #1", "callback_data": "complete_task_UUID1"}],
+            [{"text": "✅ Completar #2", "callback_data": "complete_task_UUID2"}],
+            [{"text": "➕ Nueva", "callback_data": "new_task"}]
+        ]
+    }
+}
+
+Ejemplo tarea COMPLETADA (celebra y ofrece siguiente):
+{
+    "response": {
+        "message": "🎉 <b>¡Tarea completada!</b>\\n\\n✅ Revisar PRs\\n\\n📊 Progreso: 2/5 tareas hoy",
+        "keyboard": [
+            [{"text": "📋 Ver siguientes", "callback_data": "show_tasks"}],
+            [{"text": "➕ Nueva tarea", "callback_data": "new_task"}]
+        ]
+    }
+}
+
+REGLA IMPORTANTE PARA LISTAS:
+- Cada tarea debe tener su PROPIO botón de completar con el UUID real
+- NO uses "finalizar todas" a menos que el usuario lo pida explícitamente
+- Los callback_data deben incluir el UUID real: "complete_task_abc123"
+
 Si no necesitas enviar mensaje (ej: hourly_pulse sin nada relevante), usa:
 {
     "reasoning": "No hay nada relevante que reportar",

@@ -47,9 +47,9 @@ target_metadata = Base.metadata
 settings = get_settings()
 
 def get_url():
-    """Obtiene la URL de conexion sincrona para Alembic."""
+    """Obtiene la URL de conexion sincrona para Alembic (psycopg3)."""
     return (
-        f"postgresql://{settings.postgres_user}:{settings.postgres_password}"
+        f"postgresql+psycopg://{settings.postgres_user}:{settings.postgres_password}"
         f"@{settings.postgres_host}:{settings.postgres_port}/{settings.postgres_db}"
     )
 
