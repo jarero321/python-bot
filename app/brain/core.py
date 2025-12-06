@@ -189,7 +189,7 @@ class CarlosBrain:
         parts.append("""
 ## FORMATO DE RESPUESTA
 
-Responde en JSON con esta estructura:
+IMPORTANTE: Debes responder en JSON válido con esta estructura:
 {
     "reasoning": "Tu razonamiento interno (breve)",
     "tool_calls": [
@@ -197,13 +197,41 @@ Responde en JSON con esta estructura:
         ...
     ],
     "response": {
-        "message": "Mensaje para el usuario (HTML para Telegram)",
+        "message": "Mensaje COMPLETO para el usuario (HTML para Telegram)",
         "keyboard": [[{"text": "Botón", "callback_data": "action"}]] o null
     },
     "memory_updates": {
         "active_entity": {"type": "task", "id": "xxx", "title": "yyy"} o null,
         "conversation_mode": "task_management" o null
     }
+}
+
+REGLAS CRÍTICAS:
+1. NUNCA uses mensajes de "cargando" como "Obteniendo tus tareas..." - siempre da una respuesta FINAL y COMPLETA
+2. Si no hay tareas, dilo claramente: "No tienes tareas para hoy. ¿Quieres crear una?"
+3. Si hay tareas, formátealas con emojis y estructura clara
+4. El mensaje debe ser la respuesta DEFINITIVA, no un placeholder
+
+Ejemplo de respuesta cuando NO hay tareas:
+{
+    "reasoning": "Usuario pregunta por tareas, no hay ninguna",
+    "tool_calls": [{"tool": "get_tasks_for_today", "args": {}}],
+    "response": {
+        "message": "📋 <b>Tareas de hoy</b>\\n\\n✨ No tienes tareas pendientes.\\n\\n¿Quieres crear una nueva tarea?",
+        "keyboard": [[{"text": "➕ Nueva tarea", "callback_data": "new_task"}]]
+    },
+    "memory_updates": null
+}
+
+Ejemplo cuando SÍ hay tareas:
+{
+    "reasoning": "Usuario pregunta por tareas, hay 2 pendientes",
+    "tool_calls": [{"tool": "get_tasks_for_today", "args": {}}],
+    "response": {
+        "message": "📋 <b>Tareas de hoy</b>\\n\\n🔴 <b>Revisar PRs</b> - PayCash (urgente)\\n🟡 <b>Actualizar docs</b> - Personal\\n\\n2 tareas pendientes",
+        "keyboard": [[{"text": "✅ Completar", "callback_data": "complete_menu"}]]
+    },
+    "memory_updates": {"conversation_mode": "task_management"}
 }
 
 Si no necesitas enviar mensaje (ej: hourly_pulse sin nada relevante), usa:
