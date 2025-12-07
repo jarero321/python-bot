@@ -164,7 +164,7 @@ class ToolRegistry:
 
         self._tools["complete_task"] = Tool(
             name="complete_task",
-            description="Marca una tarea como completada.",
+            description="Marca una tarea como completada usando su UUID.",
             parameters={
                 "type": "object",
                 "properties": {
@@ -173,6 +173,19 @@ class ToolRegistry:
                 "required": ["task_id"]
             },
             function=self._complete_task
+        )
+
+        self._tools["find_and_complete_task"] = Tool(
+            name="find_and_complete_task",
+            description="Busca una tarea por título y la marca como completada. Útil cuando el usuario dice 'termina la tarea X' sin dar el UUID.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "title_search": {"type": "string", "description": "Texto a buscar en el título de la tarea"}
+                },
+                "required": ["title_search"]
+            },
+            function=self._find_and_complete_task
         )
 
         self._tools["search_tasks"] = Tool(
@@ -414,6 +427,50 @@ class ToolRegistry:
     async def _complete_task(self, task_id: str) -> ToolResult:
         """Completa una tarea."""
         return await self._update_task_status(task_id, "done")
+
+    async def _find_and_complete_task(self, title_search: str) -> ToolResult:
+        """Busca una tarea por título y la completa."""
+        from app.db.models import TaskModel
+
+        async with get_session() as session:
+            # Buscar tareas activas que coincidan con el título
+            result = await session.execute(
+                select(TaskModel)
+                .where(TaskModel.user_id == self.user_id)
+                .where(TaskModel.title.ilike(f"%{title_search}%"))
+                .where(TaskModel.status.notin_(["done", "cancelled"]))
+                .order_by(TaskModel.updated_at.desc())
+                .limit(5)
+            )
+            tasks = result.scalars().all()
+
+            if not tasks:
+                return ToolResult(
+                    success=False,
+                    error=f"No encontré tareas activas con '{title_search}'"
+                )
+
+            if len(tasks) == 1:
+                # Una sola coincidencia, completarla
+                task = tasks[0]
+                task.status = "done"
+                task.completed_at = datetime.now()
+                await session.commit()
+
+                return ToolResult(
+                    success=True,
+                    data={"id": str(task.id), "title": task.title},
+                    message=f"Tarea completada: {task.title}"
+                )
+            else:
+                # Múltiples coincidencias, pedir clarificación
+                options = [{"id": str(t.id), "title": t.title, "status": t.status} for t in tasks]
+                return ToolResult(
+                    success=False,
+                    data={"matches": options},
+                    error=f"Encontré {len(tasks)} tareas que coinciden. ¿Cuál quieres completar?",
+                    message="Múltiples coincidencias"
+                )
 
     async def _search_tasks(
         self,

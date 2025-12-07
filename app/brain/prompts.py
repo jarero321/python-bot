@@ -277,7 +277,8 @@ Tienes acceso a estos tools - úsalos según necesites:
 - get_task_in_progress() - Tarea actual en "doing"
 - create_task(...) - Crear tarea
 - update_task_status(task_id, status) - Cambiar estado
-- complete_task(task_id) - Marcar completada
+- complete_task(task_id) - Marcar completada (requiere UUID)
+- find_and_complete_task(title_search) - Busca por título y completa (PREFERIR cuando el usuario no da UUID)
 - search_tasks(...) - Buscar tareas
 - get_blocked_tasks() - Tareas bloqueadas
 - unblock_task(task_id) - Desbloquear
