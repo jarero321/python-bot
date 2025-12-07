@@ -18,28 +18,40 @@ cd $APP_DIR
 echo -e "${GREEN}=== Carlos Command - Redeploy ===${NC}"
 
 # 1. Pull changes
-echo -e "${YELLOW}[1/6] Pulling latest changes...${NC}"
+echo -e "${YELLOW}[1/7] Pulling latest changes...${NC}"
 git fetch origin main
 git reset --hard origin/main
 
-# 2. Stop gracefully
-echo -e "${YELLOW}[2/6] Stopping current container...${NC}"
-docker-compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
-
-# 3. Remove if stuck
-echo -e "${YELLOW}[3/6] Cleaning up old container...${NC}"
+# 2. Stop app gracefully (keep postgres running)
+echo -e "${YELLOW}[2/7] Stopping app container...${NC}"
+docker-compose -f docker-compose.prod.yml stop app 2>/dev/null || true
 docker rm -f carlos-command-app 2>/dev/null || true
 
-# 4. Build
-echo -e "${YELLOW}[4/6] Building new image...${NC}"
-docker-compose -f docker-compose.prod.yml build --no-cache
+# 3. Build
+echo -e "${YELLOW}[3/7] Building new image...${NC}"
+docker-compose -f docker-compose.prod.yml build --no-cache app
 
-# 5. Start
-echo -e "${YELLOW}[5/6] Starting container...${NC}"
-docker-compose -f docker-compose.prod.yml up -d
+# 4. Ensure PostgreSQL is running
+echo -e "${YELLOW}[4/7] Ensuring PostgreSQL is running...${NC}"
+docker-compose -f docker-compose.prod.yml up -d postgres
+sleep 3
 
-# 6. Health check with retry
-echo -e "${YELLOW}[6/6] Health check...${NC}"
+# 5. Run migrations
+echo -e "${YELLOW}[5/7] Running migrations...${NC}"
+docker-compose -f docker-compose.prod.yml run --rm migrations
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}Migrations completed${NC}"
+else
+    echo -e "${RED}Migration failed!${NC}"
+    exit 1
+fi
+
+# 6. Start app
+echo -e "${YELLOW}[6/7] Starting app container...${NC}"
+docker-compose -f docker-compose.prod.yml up -d app
+
+# 7. Health check with retry
+echo -e "${YELLOW}[7/7] Health check...${NC}"
 for i in {1..30}; do
     if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
         echo -e "${GREEN}Health check passed!${NC}"

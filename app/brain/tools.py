@@ -342,8 +342,12 @@ class ToolRegistry:
     ) -> ToolResult:
         """Crea una nueva tarea."""
         from app.db.models import TaskModel
+        from app.brain.embeddings import get_embedding
 
         async with get_session() as session:
+            # Generar embedding para RAG (búsqueda semántica, duplicados)
+            embedding = await get_embedding(title)
+
             task = TaskModel(
                 user_id=self.user_id,
                 title=title,
@@ -358,9 +362,7 @@ class ToolRegistry:
                 parent_task_id=parent_task_id,
                 blocked_by_external=blocked_by_external,
                 blocked_at=datetime.now() if blocked_by_external else None,
-                # TODO: Habilitar embeddings después de arreglar migración
-                # La columna embedding es double precision[] pero debe ser vector(768)
-                embedding=None,
+                embedding=embedding,
             )
 
             session.add(task)
