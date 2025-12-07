@@ -52,7 +52,18 @@ def get_engine():
             """Registra pgvector síncronamente al crear conexión."""
             try:
                 from pgvector.psycopg import register_vector
-                register_vector(dbapi_conn)
+                # SQLAlchemy envuelve la conexión de psycopg3 en un adaptador
+                # Necesitamos acceder a la conexión subyacente
+                if hasattr(dbapi_conn, 'dbapi_connection'):
+                    # Es un adaptador de SQLAlchemy
+                    raw_conn = dbapi_conn.dbapi_connection
+                elif hasattr(dbapi_conn, '_conn'):
+                    # Acceso directo al atributo interno
+                    raw_conn = dbapi_conn._conn
+                else:
+                    raw_conn = dbapi_conn
+
+                register_vector(raw_conn)
                 logger.debug("pgvector registrado en nueva conexión")
             except Exception as e:
                 logger.warning(f"Error registrando pgvector: {e}")
