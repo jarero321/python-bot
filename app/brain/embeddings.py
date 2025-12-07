@@ -26,7 +26,7 @@ def _ensure_configured():
         logger.info(f"Gemini embeddings configurado: {MODEL_NAME}")
 
 
-async def get_embedding(text: str) -> np.ndarray:
+async def get_embedding(text: str) -> list[float]:
     """
     Genera embedding para un texto usando Gemini.
 
@@ -34,7 +34,7 @@ async def get_embedding(text: str) -> np.ndarray:
         text: Texto a convertir
 
     Returns:
-        Vector numpy de 768 dimensiones
+        Lista de 768 floats (compatible con pgvector/psycopg3)
     """
     _ensure_configured()
 
@@ -44,8 +44,9 @@ async def get_embedding(text: str) -> np.ndarray:
         task_type="retrieval_document"
     )
 
-    # Retornar como numpy array para compatibilidad con pgvector/psycopg3
-    return np.array(result["embedding"], dtype=np.float32)
+    # Retornar como lista de Python para compatibilidad con pgvector/psycopg3
+    # psycopg3 necesita una lista, no un numpy array
+    return [float(x) for x in result["embedding"]]
 
 
 async def get_embeddings_batch(texts: list[str]) -> list[np.ndarray]:

@@ -30,13 +30,14 @@ class Base(DeclarativeBase):
 # Engine y session factory
 _engine = None
 _async_session_factory = None
-_pgvector_registered = False
 
 
 def get_engine():
     """Obtiene el engine de PostgreSQL con psycopg3."""
     global _engine
     if _engine is None:
+        from sqlalchemy import event
+
         _engine = create_async_engine(
             settings.database_url,
             echo=settings.debug,
@@ -44,6 +45,18 @@ def get_engine():
             max_overflow=10,
             pool_pre_ping=True,
         )
+
+        # Registrar pgvector en cada nueva conexión del pool
+        @event.listens_for(_engine.sync_engine, "connect")
+        def on_connect(dbapi_conn, connection_record):
+            """Registra pgvector síncronamente al crear conexión."""
+            try:
+                from pgvector.psycopg import register_vector
+                register_vector(dbapi_conn)
+                logger.debug("pgvector registrado en nueva conexión")
+            except Exception as e:
+                logger.warning(f"Error registrando pgvector: {e}")
+
     return _engine
 
 
@@ -59,26 +72,6 @@ def get_session_factory():
     return _async_session_factory
 
 
-async def _register_pgvector_types():
-    """Registra los tipos de pgvector globalmente para psycopg3."""
-    global _pgvector_registered
-    if _pgvector_registered:
-        return
-
-    try:
-        import psycopg
-        from pgvector.psycopg import register_vector_async
-
-        # Obtener una conexión para registrar los tipos
-        engine = get_engine()
-        async with engine.connect() as conn:
-            raw_conn = await conn.get_raw_connection()
-            await register_vector_async(raw_conn.dbapi_connection)
-
-        _pgvector_registered = True
-        logger.info("pgvector registrado correctamente con psycopg3")
-    except Exception as e:
-        logger.warning(f"No se pudo registrar pgvector: {e}")
 
 
 @asynccontextmanager
@@ -125,9 +118,7 @@ async def init_db() -> None:
             # await conn.run_sync(Base.metadata.drop_all)  # Descomentar para reset
             await conn.run_sync(Base.metadata.create_all)
 
-    # Registrar tipos pgvector para psycopg3
-    await _register_pgvector_types()
-
+    # pgvector se registra automáticamente en cada nueva conexión via el evento "connect"
     logger.info("Base de datos PostgreSQL inicializada con pgvector")
 
 
