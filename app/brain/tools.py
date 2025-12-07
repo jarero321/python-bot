@@ -341,20 +341,10 @@ class ToolRegistry:
         blocked_by_external: str | None = None,
     ) -> ToolResult:
         """Crea una nueva tarea."""
-        from uuid import uuid4
-        from sqlalchemy import text
         from app.db.models import TaskModel
-        from app.brain.embeddings import get_embedding
 
         async with get_session() as session:
-            # Generar embedding para RAG (búsqueda semántica, duplicados, etc.)
-            embedding_list = await get_embedding(title)
-
-            # Crear tarea sin embedding primero
-            task_id = uuid4()
-            now = datetime.now()
             task = TaskModel(
-                id=task_id,
                 user_id=self.user_id,
                 title=title,
                 status="today" if not blocked_by_external else "backlog",
@@ -367,23 +357,13 @@ class ToolRegistry:
                 notes=notes,
                 parent_task_id=parent_task_id,
                 blocked_by_external=blocked_by_external,
-                blocked_at=now if blocked_by_external else None,
-                embedding=None,  # Se actualiza después con SQL raw
-                created_at=now,
-                updated_at=now,
+                blocked_at=datetime.now() if blocked_by_external else None,
+                # TODO: Habilitar embeddings después de arreglar migración
+                # La columna embedding es double precision[] pero debe ser vector(768)
+                embedding=None,
             )
 
             session.add(task)
-            await session.flush()
-
-            # Actualizar embedding usando SQL raw con cast explícito
-            # Usamos CAST() en lugar de :: para evitar conflicto con parámetros de SQLAlchemy
-            embedding_str = "[" + ",".join(str(x) for x in embedding_list) + "]"
-            await session.execute(
-                text("UPDATE tasks SET embedding = CAST(:emb AS vector) WHERE id = CAST(:id AS uuid)"),
-                {"emb": embedding_str, "id": str(task_id)}
-            )
-
             await session.commit()
             await session.refresh(task)
 
