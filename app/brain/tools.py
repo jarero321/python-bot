@@ -341,14 +341,20 @@ class ToolRegistry:
         blocked_by_external: str | None = None,
     ) -> ToolResult:
         """Crea una nueva tarea."""
+        from uuid import uuid4
+        from sqlalchemy import text
         from app.db.models import TaskModel
         from app.brain.embeddings import get_embedding
 
         async with get_session() as session:
             # Generar embedding para RAG (búsqueda semántica, duplicados, etc.)
-            embedding = await get_embedding(title)
+            embedding_list = await get_embedding(title)
 
+            # Crear tarea sin embedding primero
+            task_id = uuid4()
+            now = datetime.now()
             task = TaskModel(
+                id=task_id,
                 user_id=self.user_id,
                 title=title,
                 status="today" if not blocked_by_external else "backlog",
@@ -361,11 +367,22 @@ class ToolRegistry:
                 notes=notes,
                 parent_task_id=parent_task_id,
                 blocked_by_external=blocked_by_external,
-                blocked_at=datetime.now() if blocked_by_external else None,
-                embedding=embedding
+                blocked_at=now if blocked_by_external else None,
+                embedding=None,  # Se actualiza después con SQL raw
+                created_at=now,
+                updated_at=now,
             )
 
             session.add(task)
+            await session.flush()
+
+            # Actualizar embedding usando SQL raw con cast explícito
+            embedding_str = "[" + ",".join(str(x) for x in embedding_list) + "]"
+            await session.execute(
+                text("UPDATE tasks SET embedding = :emb::vector WHERE id = :id"),
+                {"emb": embedding_str, "id": task_id}
+            )
+
             await session.commit()
             await session.refresh(task)
 
