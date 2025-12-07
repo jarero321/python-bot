@@ -379,8 +379,8 @@ class ToolRegistry:
             # Actualizar embedding usando SQL raw con cast explícito
             embedding_str = "[" + ",".join(str(x) for x in embedding_list) + "]"
             await session.execute(
-                text("UPDATE tasks SET embedding = :emb::vector WHERE id = :id"),
-                {"emb": embedding_str, "id": task_id}
+                text("UPDATE tasks SET embedding = :emb::vector WHERE id = :id::uuid"),
+                {"emb": embedding_str, "id": str(task_id)}
             )
 
             await session.commit()
