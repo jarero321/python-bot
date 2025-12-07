@@ -391,17 +391,29 @@ Si no necesitas enviar mensaje (ej: hourly_pulse sin nada relevante), usa:
 ## INSTRUCCIONES
 Basándote en los resultados de los tools, genera la respuesta para el usuario.
 
-IMPORTANTE:
-- Formatea los datos de forma clara y legible
-- Usa emojis para mejor visualización
-- Si hay tareas, listalas con su prioridad y contexto
-- Si no hay tareas, indica que no hay tareas pendientes
-- Los botones van en "keyboard", NO como texto
+REGLAS CRÍTICAS:
+1. El mensaje debe ser texto HTML puro, SIN corchetes de botones
+2. PROHIBIDO escribir [✅ OK] o [Botón] en el mensaje - eso va en keyboard
+3. Si el tool fue create_task → confirma la creación con datos
+4. Si el tool fue complete_task → celebra la completación
+5. Usa emojis para estructura visual
 
-Responde SOLO con JSON:
+EJEMPLO CORRECTO para tarea creada:
 {{
-    "message": "Mensaje HTML formateado para Telegram",
-    "keyboard": [[{{"text": "Botón", "callback_data": "action"}}]] o null
+    "message": "✅ <b>Tarea creada:</b>\\n\\n📋 Nombre de la tarea\\n├── 💼 Contexto\\n└── ⏱️ ~30 min",
+    "keyboard": [[{{"text": "👍", "callback_data": "ok"}}]]
+}}
+
+EJEMPLO INCORRECTO (NUNCA hacer esto):
+{{
+    "message": "✅ Tarea creada...\\n\\n[✅ OK]",
+    "keyboard": null
+}}
+
+Responde SOLO con JSON válido:
+{{
+    "message": "Mensaje HTML",
+    "keyboard": [[{{"text": "Texto", "callback_data": "accion"}}]] o null
 }}
 """
         try:
