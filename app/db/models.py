@@ -378,6 +378,77 @@ class NutritionLogModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class BodyMetricsModel(Base):
+    """Métricas corporales (peso, grasa, medidas)."""
+
+    __tablename__ = "body_metrics"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("user_profile.id"), nullable=False
+    )
+
+    date: Mapped[date] = mapped_column(Date, default=date.today)
+
+    # Medidas principales
+    weight_kg: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
+    body_fat_percentage: Mapped[float | None] = mapped_column(Numeric(4, 1))
+    muscle_mass_kg: Mapped[float | None] = mapped_column(Numeric(5, 2))
+
+    # Medidas secundarias (opcional)
+    waist_cm: Mapped[float | None] = mapped_column(Numeric(5, 1))
+    chest_cm: Mapped[float | None] = mapped_column(Numeric(5, 1))
+    arms_cm: Mapped[float | None] = mapped_column(Numeric(5, 1))
+    legs_cm: Mapped[float | None] = mapped_column(Numeric(5, 1))
+
+    # Contexto
+    time_of_day: Mapped[str | None] = mapped_column(String(20))  # morning, evening
+    notes: Mapped[str | None] = mapped_column(Text)
+    photo_url: Mapped[str | None] = mapped_column(String(500))
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class FitnessGoalModel(Base):
+    """Metas de fitness/nutrición."""
+
+    __tablename__ = "fitness_goals"
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("user_profile.id"), nullable=False
+    )
+
+    # Tipo de meta
+    goal_type: Mapped[str] = mapped_column(String(30), nullable=False)  # weight_loss, muscle_gain, maintenance
+
+    # Valores
+    target_value: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
+    start_value: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
+    current_value: Mapped[float | None] = mapped_column(Numeric(5, 2))
+
+    # Fechas
+    start_date: Mapped[date] = mapped_column(Date, default=date.today)
+    target_date: Mapped[date | None] = mapped_column(Date)
+
+    # Estado
+    status: Mapped[str] = mapped_column(String(20), default="active")  # active, completed, abandoned
+
+    # Macros objetivo (opcional)
+    daily_calories: Mapped[int | None] = mapped_column(Integer)
+    daily_protein_g: Mapped[int | None] = mapped_column(Integer)
+    daily_carbs_g: Mapped[int | None] = mapped_column(Integer)
+    daily_fat_g: Mapped[int | None] = mapped_column(Integer)
+
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
 # ============================================================
 # BRAIN MEMORY
 # ============================================================

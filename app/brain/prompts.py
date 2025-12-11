@@ -365,6 +365,127 @@ Una o más tareas llevan mucho tiempo en "doing". Tu objetivo es:
 
 Las tareas están en context.tasks
 """,
+
+    "meal_reminder": """
+Es hora de registrar una comida. El tipo está en context.meal_type.
+
+Tu objetivo es:
+1. Preguntar de forma amigable qué comió
+2. Ofrecer botones de quick-log para opciones comunes
+3. Si es almuerzo/cena, mencionar la importancia de la proteína
+
+Ejemplos por tipo:
+- breakfast: "🌅 Buenos días! ¿Qué desayunaste hoy?"
+- lunch: "🍽️ Hora del almuerzo! ¿Qué comiste?"
+- dinner: "🌙 ¿Qué cenaste hoy?"
+
+Ofrece botones como:
+- [🥗 Saludable] [🍕 No tanto] [⏭️ Saltar]
+
+NO seas crítico si dice que comió algo no saludable. Solo registra.
+""",
+
+    "proactive_checkin": """
+Es hora del check-in proactivo. El periodo está en context.period.
+
+Tu objetivo es:
+1. Preguntar cómo va el día de forma genuina
+2. Mostrar las tareas pendientes del día
+3. Ofrecer ayuda si hay muchas o si están atrasadas
+
+A diferencia del hourly_pulse, este trigger SIEMPRE envía mensaje.
+
+Ejemplos:
+- morning (10:30): "☀️ ¿Cómo va la mañana? Tienes X tareas pendientes para hoy."
+- afternoon (3:30): "📊 Check de la tarde! ¿Cómo vamos? X de Y tareas completadas."
+
+Usa get_tasks_for_today() para obtener el estado actual.
+Ofrece botones útiles: [📋 Ver tareas] [➕ Nueva] [🆘 Necesito ayuda]
+""",
+
+    "reminder_due": """
+Un reminder programado está listo. Los datos están en context.
+
+Tu objetivo es:
+1. Enviar el mensaje del reminder de forma clara
+2. Si tiene task_id asociada, ofrecer ver/completar la tarea
+3. Ofrecer posponer si es necesario
+
+Usa un tono que llame la atención pero no sea molesto.
+""",
+
+    "weekly_review": """
+Es la revisión semanal (Domingo 10 AM). Tu objetivo es:
+1. Resumir la semana que pasó (tareas completadas, pendientes)
+2. Destacar logros importantes
+3. Identificar tareas estancadas o vencidas
+4. Sugerir prioridades para la próxima semana
+5. Revisar metas de fitness si hay
+
+Usa get_tasks_for_today(), get_overdue_tasks(), get_workout_history(days=7).
+
+Formato sugerido:
+📊 **Revisión Semanal**
+
+✅ Completadas: X tareas
+⏳ Pendientes: Y tareas
+⚠️ Vencidas: Z tareas
+
+🏆 Logros destacados:
+- ...
+
+🎯 Prioridades próxima semana:
+- ...
+
+Botones: [📋 Ver pendientes] [🎯 Planificar semana]
+""",
+
+    "payday_alert": """
+Es alerta de quincena. El contexto tiene is_pre (antes o después) y day.
+
+Si is_pre=True (días 13-14 o 28-29):
+- Recordar que viene la quincena
+- Preguntar por deudas/pagos pendientes
+- Sugerir revisar presupuesto
+
+Si is_pre=False (días 15 o 30):
+- Celebrar la quincena
+- Recordar pagar deudas (get_debt_status)
+- Sugerir revisar gastos del periodo anterior (get_spending_summary)
+
+Usa get_debt_status(), get_spending_summary() para contexto.
+
+Botones: [💳 Ver deudas] [📊 Ver gastos] [✅ Todo pagado]
+""",
+
+    "study_reminder": """
+Es hora de estudiar (5:30 PM). Tu objetivo es:
+
+1. Motivar al usuario a dedicar tiempo al aprendizaje
+2. Sugerir un tema basándote en rotación balanceada
+3. Ofrecer opciones de qué estudiar
+
+Considera:
+- Los proyectos de estudio activos del usuario
+- Qué tema hace más tiempo que no toca
+- El nivel de energía típico de la tarde
+
+Formato sugerido:
+📚 **Hora de estudiar!**
+
+¿Listo para avanzar un poco?
+
+Sugerencia: [tema] - [razón corta]
+
+También podrías:
+- [tema alternativo 1]
+- [tema alternativo 2]
+
+Botones: [📖 Empiezo ahora] [⏰ En 30 min] [🙅 Hoy no puedo]
+
+Mantén un tono motivador pero no presionante. Si el usuario ha estado muy ocupado,
+reconócelo y ofrece sesión corta (15-20 min).
+""",
 }
 
 

@@ -950,6 +950,74 @@ class ToolRegistry:
             function=self._check_gym_today
         )
 
+        # Body Metrics Tools
+        self._tools["log_body_metrics"] = Tool(
+            name="log_body_metrics",
+            description="Registra métricas corporales (peso, grasa, medidas).",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "weight_kg": {"type": "number", "description": "Peso en kg"},
+                    "body_fat_percentage": {"type": "number", "description": "% de grasa corporal"},
+                    "muscle_mass_kg": {"type": "number", "description": "Masa muscular en kg"},
+                    "waist_cm": {"type": "number", "description": "Cintura en cm"},
+                    "notes": {"type": "string"}
+                },
+                "required": ["weight_kg"]
+            },
+            function=self._log_body_metrics
+        )
+
+        self._tools["get_weight_history"] = Tool(
+            name="get_weight_history",
+            description="Obtiene historial de peso y métricas corporales.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "days": {"type": "integer", "default": 30}
+                },
+                "required": []
+            },
+            function=self._get_weight_history
+        )
+
+        self._tools["get_daily_nutrition_summary"] = Tool(
+            name="get_daily_nutrition_summary",
+            description="Obtiene resumen nutricional del día (comidas, calorías, proteína).",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "target_date": {"type": "string", "description": "YYYY-MM-DD, default hoy"}
+                },
+                "required": []
+            },
+            function=self._get_daily_nutrition_summary
+        )
+
+        self._tools["set_fitness_goal"] = Tool(
+            name="set_fitness_goal",
+            description="Establece una meta de fitness (peso, grasa, etc).",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "goal_type": {"type": "string", "enum": ["weight_loss", "muscle_gain", "maintenance"]},
+                    "target_value": {"type": "number", "description": "Valor objetivo (ej: 75 kg)"},
+                    "target_date": {"type": "string", "description": "YYYY-MM-DD fecha objetivo"},
+                    "daily_calories": {"type": "integer"},
+                    "daily_protein_g": {"type": "integer"}
+                },
+                "required": ["goal_type", "target_value"]
+            },
+            function=self._set_fitness_goal
+        )
+
+        self._tools["get_fitness_goal_progress"] = Tool(
+            name="get_fitness_goal_progress",
+            description="Obtiene progreso hacia la meta de fitness activa.",
+            parameters={"type": "object", "properties": {}, "required": []},
+            function=self._get_fitness_goal_progress
+        )
+
     async def _log_workout(
         self,
         type: str,
@@ -1070,6 +1138,302 @@ class ToolRegistry:
                     "is_gym_day": is_gym_day,
                     "already_went": already_went,
                     "gym_days": profile.gym_days
+                }
+            )
+
+    async def _log_body_metrics(
+        self,
+        weight_kg: float,
+        body_fat_percentage: float | None = None,
+        muscle_mass_kg: float | None = None,
+        waist_cm: float | None = None,
+        notes: str | None = None
+    ) -> ToolResult:
+        """Registra métricas corporales."""
+        from app.db.models import BodyMetricsModel, FitnessGoalModel
+
+        async with get_session() as session:
+            metrics = BodyMetricsModel(
+                user_id=self.user_id,
+                weight_kg=Decimal(str(weight_kg)),
+                body_fat_percentage=Decimal(str(body_fat_percentage)) if body_fat_percentage else None,
+                muscle_mass_kg=Decimal(str(muscle_mass_kg)) if muscle_mass_kg else None,
+                waist_cm=Decimal(str(waist_cm)) if waist_cm else None,
+                time_of_day="morning" if datetime.now().hour < 12 else "evening",
+                notes=notes
+            )
+            session.add(metrics)
+
+            # Actualizar meta activa si existe
+            goal_result = await session.execute(
+                select(FitnessGoalModel)
+                .where(FitnessGoalModel.user_id == self.user_id)
+                .where(FitnessGoalModel.status == "active")
+                .order_by(FitnessGoalModel.created_at.desc())
+                .limit(1)
+            )
+            goal = goal_result.scalar_one_or_none()
+            if goal:
+                goal.current_value = Decimal(str(weight_kg))
+
+            await session.commit()
+
+            # Obtener peso anterior para comparar
+            prev_result = await session.execute(
+                select(BodyMetricsModel)
+                .where(BodyMetricsModel.user_id == self.user_id)
+                .where(BodyMetricsModel.date < date.today())
+                .order_by(BodyMetricsModel.date.desc())
+                .limit(1)
+            )
+            prev = prev_result.scalar_one_or_none()
+
+            diff = None
+            if prev:
+                diff = round(float(weight_kg) - float(prev.weight_kg), 2)
+
+            return ToolResult(
+                success=True,
+                data={
+                    "weight_kg": weight_kg,
+                    "date": date.today().isoformat(),
+                    "diff_from_previous": diff,
+                    "previous_weight": float(prev.weight_kg) if prev else None
+                },
+                message=f"Peso registrado: {weight_kg} kg" + (f" ({'+' if diff > 0 else ''}{diff} kg)" if diff else "")
+            )
+
+    async def _get_weight_history(self, days: int = 30) -> ToolResult:
+        """Obtiene historial de peso."""
+        from app.db.models import BodyMetricsModel
+
+        async with get_session() as session:
+            start_date = date.today() - timedelta(days=days)
+
+            result = await session.execute(
+                select(BodyMetricsModel)
+                .where(BodyMetricsModel.user_id == self.user_id)
+                .where(BodyMetricsModel.date >= start_date)
+                .order_by(BodyMetricsModel.date.desc())
+            )
+
+            entries = result.scalars().all()
+
+            if not entries:
+                return ToolResult(
+                    success=True,
+                    data={"entries": [], "count": 0},
+                    message="No hay registros de peso en este período"
+                )
+
+            history = [
+                {
+                    "date": e.date.isoformat(),
+                    "weight_kg": float(e.weight_kg),
+                    "body_fat_percentage": float(e.body_fat_percentage) if e.body_fat_percentage else None,
+                    "waist_cm": float(e.waist_cm) if e.waist_cm else None
+                }
+                for e in entries
+            ]
+
+            # Calcular estadísticas
+            weights = [float(e.weight_kg) for e in entries]
+            first_weight = weights[-1] if weights else None
+            last_weight = weights[0] if weights else None
+            total_change = round(last_weight - first_weight, 2) if first_weight and last_weight else None
+
+            return ToolResult(
+                success=True,
+                data={
+                    "entries": history,
+                    "count": len(history),
+                    "period_days": days,
+                    "min_weight": min(weights) if weights else None,
+                    "max_weight": max(weights) if weights else None,
+                    "avg_weight": round(sum(weights) / len(weights), 2) if weights else None,
+                    "total_change": total_change,
+                    "current_weight": last_weight
+                }
+            )
+
+    async def _get_daily_nutrition_summary(self, target_date: str | None = None) -> ToolResult:
+        """Obtiene resumen nutricional del día."""
+        from app.db.models import NutritionLogModel, FitnessGoalModel
+
+        async with get_session() as session:
+            check_date = date.fromisoformat(target_date) if target_date else date.today()
+
+            result = await session.execute(
+                select(NutritionLogModel)
+                .where(NutritionLogModel.user_id == self.user_id)
+                .where(NutritionLogModel.date == check_date)
+                .order_by(NutritionLogModel.created_at)
+            )
+
+            meals = result.scalars().all()
+
+            # Totales
+            total_calories = sum(m.calories_estimate or 0 for m in meals)
+            total_protein = sum(m.protein_estimate or 0 for m in meals)
+
+            # Obtener metas si hay
+            goal_result = await session.execute(
+                select(FitnessGoalModel)
+                .where(FitnessGoalModel.user_id == self.user_id)
+                .where(FitnessGoalModel.status == "active")
+                .limit(1)
+            )
+            goal = goal_result.scalar_one_or_none()
+
+            meals_data = [
+                {
+                    "meal_type": m.meal_type,
+                    "description": m.description,
+                    "calories": m.calories_estimate,
+                    "protein": m.protein_estimate,
+                    "is_healthy": m.is_healthy
+                }
+                for m in meals
+            ]
+
+            return ToolResult(
+                success=True,
+                data={
+                    "date": check_date.isoformat(),
+                    "meals": meals_data,
+                    "meal_count": len(meals),
+                    "total_calories": total_calories,
+                    "total_protein": total_protein,
+                    "calorie_goal": goal.daily_calories if goal else None,
+                    "protein_goal": goal.daily_protein_g if goal else None,
+                    "calories_remaining": (goal.daily_calories - total_calories) if goal and goal.daily_calories else None,
+                    "protein_remaining": (goal.daily_protein_g - total_protein) if goal and goal.daily_protein_g else None
+                }
+            )
+
+    async def _set_fitness_goal(
+        self,
+        goal_type: str,
+        target_value: float,
+        target_date: str | None = None,
+        daily_calories: int | None = None,
+        daily_protein_g: int | None = None
+    ) -> ToolResult:
+        """Establece una meta de fitness."""
+        from app.db.models import FitnessGoalModel, BodyMetricsModel
+
+        async with get_session() as session:
+            # Obtener peso actual
+            weight_result = await session.execute(
+                select(BodyMetricsModel)
+                .where(BodyMetricsModel.user_id == self.user_id)
+                .order_by(BodyMetricsModel.date.desc())
+                .limit(1)
+            )
+            current = weight_result.scalar_one_or_none()
+            start_value = float(current.weight_kg) if current else target_value
+
+            # Desactivar metas anteriores
+            await session.execute(
+                update(FitnessGoalModel)
+                .where(FitnessGoalModel.user_id == self.user_id)
+                .where(FitnessGoalModel.status == "active")
+                .values(status="abandoned")
+            )
+
+            goal = FitnessGoalModel(
+                user_id=self.user_id,
+                goal_type=goal_type,
+                target_value=Decimal(str(target_value)),
+                start_value=Decimal(str(start_value)),
+                current_value=Decimal(str(start_value)),
+                target_date=date.fromisoformat(target_date) if target_date else None,
+                daily_calories=daily_calories,
+                daily_protein_g=daily_protein_g,
+                status="active"
+            )
+            session.add(goal)
+            await session.commit()
+
+            diff_to_goal = round(target_value - start_value, 2)
+
+            return ToolResult(
+                success=True,
+                data={
+                    "goal_type": goal_type,
+                    "start_value": start_value,
+                    "target_value": target_value,
+                    "diff_to_goal": diff_to_goal,
+                    "target_date": target_date,
+                    "daily_calories": daily_calories,
+                    "daily_protein_g": daily_protein_g
+                },
+                message=f"Meta establecida: {goal_type} → {target_value} kg ({'+' if diff_to_goal > 0 else ''}{diff_to_goal} kg)"
+            )
+
+    async def _get_fitness_goal_progress(self) -> ToolResult:
+        """Obtiene progreso hacia la meta activa."""
+        from app.db.models import FitnessGoalModel, BodyMetricsModel
+
+        async with get_session() as session:
+            goal_result = await session.execute(
+                select(FitnessGoalModel)
+                .where(FitnessGoalModel.user_id == self.user_id)
+                .where(FitnessGoalModel.status == "active")
+                .order_by(FitnessGoalModel.created_at.desc())
+                .limit(1)
+            )
+            goal = goal_result.scalar_one_or_none()
+
+            if not goal:
+                return ToolResult(
+                    success=True,
+                    data=None,
+                    message="No hay meta de fitness activa"
+                )
+
+            # Obtener peso actual
+            weight_result = await session.execute(
+                select(BodyMetricsModel)
+                .where(BodyMetricsModel.user_id == self.user_id)
+                .order_by(BodyMetricsModel.date.desc())
+                .limit(1)
+            )
+            current = weight_result.scalar_one_or_none()
+            current_weight = float(current.weight_kg) if current else float(goal.start_value)
+
+            # Calcular progreso
+            start = float(goal.start_value)
+            target = float(goal.target_value)
+            total_diff = target - start
+            current_diff = current_weight - start
+
+            if total_diff != 0:
+                progress_pct = round((current_diff / total_diff) * 100, 1)
+            else:
+                progress_pct = 100 if current_weight == target else 0
+
+            remaining = round(target - current_weight, 2)
+
+            # Días restantes
+            days_remaining = None
+            if goal.target_date:
+                days_remaining = (goal.target_date - date.today()).days
+
+            return ToolResult(
+                success=True,
+                data={
+                    "goal_type": goal.goal_type,
+                    "start_value": start,
+                    "target_value": target,
+                    "current_value": current_weight,
+                    "progress_percentage": max(0, min(100, progress_pct)),
+                    "remaining_to_goal": remaining,
+                    "target_date": goal.target_date.isoformat() if goal.target_date else None,
+                    "days_remaining": days_remaining,
+                    "daily_calories": goal.daily_calories,
+                    "daily_protein_g": goal.daily_protein_g,
+                    "started_at": goal.start_date.isoformat()
                 }
             )
 

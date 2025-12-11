@@ -23,6 +23,9 @@ from app.triggers.handlers import (
     trigger_deadline_check,
     trigger_stuck_tasks_check,
     trigger_payday_alert,
+    trigger_meal_reminder,
+    trigger_proactive_checkin,
+    trigger_study_reminder,
 )
 
 logger = logging.getLogger(__name__)
@@ -88,6 +91,74 @@ async def setup_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
     logger.info("Trigger configurado: hourly_pulse (9-18 L-V)")
+
+    # ==================== MEAL REMINDERS ====================
+
+    # Desayuno - 8:00 AM todos los días
+    scheduler.add_job(
+        trigger_meal_reminder,
+        CronTrigger(hour=8, minute=0),
+        id="meal_breakfast",
+        name="Meal Reminder - Breakfast",
+        kwargs={"meal_type": "breakfast"},
+        replace_existing=True,
+    )
+
+    # Almuerzo - 1:30 PM todos los días
+    scheduler.add_job(
+        trigger_meal_reminder,
+        CronTrigger(hour=13, minute=30),
+        id="meal_lunch",
+        name="Meal Reminder - Lunch",
+        kwargs={"meal_type": "lunch"},
+        replace_existing=True,
+    )
+
+    # Cena - 7:30 PM todos los días
+    scheduler.add_job(
+        trigger_meal_reminder,
+        CronTrigger(hour=19, minute=30),
+        id="meal_dinner",
+        name="Meal Reminder - Dinner",
+        kwargs={"meal_type": "dinner"},
+        replace_existing=True,
+    )
+    logger.info("Triggers configurados: meal_reminders (8AM, 1:30PM, 7:30PM)")
+
+    # ==================== PROACTIVE CHECK-INS ====================
+
+    # Mid-morning check-in - 10:30 AM (L-V)
+    scheduler.add_job(
+        trigger_proactive_checkin,
+        CronTrigger(hour=10, minute=30, day_of_week="mon-fri"),
+        id="checkin_morning",
+        name="Proactive Check-in Morning",
+        kwargs={"period": "morning"},
+        replace_existing=True,
+    )
+
+    # Afternoon check-in - 3:30 PM (L-V)
+    scheduler.add_job(
+        trigger_proactive_checkin,
+        CronTrigger(hour=15, minute=30, day_of_week="mon-fri"),
+        id="checkin_afternoon",
+        name="Proactive Check-in Afternoon",
+        kwargs={"period": "afternoon"},
+        replace_existing=True,
+    )
+    logger.info("Triggers configurados: proactive_checkin (10:30AM, 3:30PM L-V)")
+
+    # ==================== STUDY ====================
+
+    # Study reminder - 5:30 PM todos los días
+    scheduler.add_job(
+        trigger_study_reminder,
+        CronTrigger(hour=17, minute=30),
+        id="study_reminder",
+        name="Study Reminder",
+        replace_existing=True,
+    )
+    logger.info("Trigger configurado: study_reminder (5:30 PM)")
 
     # ==================== EVENING ====================
 
